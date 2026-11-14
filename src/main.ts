@@ -2680,6 +2680,63 @@ class YouTubeGallerySettingTab extends PluginSettingTab {
 			showWidthControls(settings.customNoteWidth);
 		}
 
+		divider(appearance);
+		const mobileRow = (
+			name: string,
+			desc: string,
+			layouts: [string, string][],
+			layoutKey: "mobileVideoLayout" | "mobileChannelLayout",
+			columnsKey: "mobileColumns" | "mobileChannelColumns",
+		): void => {
+			const setting = new Setting(appearance).setName(name).setDesc(desc);
+			let columnsEl: HTMLSelectElement | null = null;
+			const syncColumns = (): void => {
+				columnsEl?.toggle(settings[layoutKey] !== "horizontal");
+			};
+			setting.addDropdown((dropdown) => {
+				columnsEl = dropdown.selectEl;
+				dropdown
+					.addOption("1", "1 per row")
+					.addOption("2", "2 per row")
+					.addOption("3", "3 per row")
+					.setValue(String(settings[columnsKey]))
+					.onChange(async (value) => {
+						settings[columnsKey] = Number(value);
+						await commit(false);
+					});
+			});
+			setting.addDropdown((dropdown) => {
+				for (const [value, label] of layouts) dropdown.addOption(value, label);
+				dropdown.setValue(settings[layoutKey]).onChange(async (value) => {
+					settings[layoutKey] = value as VideoLayout & ChannelLayout;
+					syncColumns();
+					await commit(false);
+				});
+			});
+			syncColumns();
+		};
+		mobileRow(
+			"Video layout on mobile app",
+			"",
+			[
+				["vertical", "Vertical"],
+				["horizontal", "Horizontal"],
+			],
+			"mobileVideoLayout",
+			"mobileColumns",
+		);
+		divider(appearance);
+		mobileRow(
+			"Channel card layout on mobile app",
+			"",
+			[
+				["horizontal", "Horizontal"],
+				["vertical", "Vertical"],
+			],
+			"mobileChannelLayout",
+			"mobileChannelColumns",
+		);
+
 		const info = group("Information");
 
 		new Setting(info)
@@ -2905,64 +2962,6 @@ class YouTubeGallerySettingTab extends PluginSettingTab {
 				}),
 			);
 		toolIcon(clearButton, "trash-2");
-
-		const mobile = group("Appearance on mobile");
-
-		const mobileRow = (
-			name: string,
-			desc: string,
-			layouts: [string, string][],
-			layoutKey: "mobileVideoLayout" | "mobileChannelLayout",
-			columnsKey: "mobileColumns" | "mobileChannelColumns",
-		): void => {
-			const setting = new Setting(mobile).setName(name).setDesc(desc);
-			let columnsEl: HTMLSelectElement | null = null;
-			const syncColumns = (): void => {
-				columnsEl?.toggle(settings[layoutKey] !== "horizontal");
-			};
-			setting.addDropdown((dropdown) => {
-				columnsEl = dropdown.selectEl;
-				dropdown
-					.addOption("1", "1 per row")
-					.addOption("2", "2 per row")
-					.addOption("3", "3 per row")
-					.setValue(String(settings[columnsKey]))
-					.onChange(async (value) => {
-						settings[columnsKey] = Number(value);
-						await commit(false);
-					});
-			});
-			setting.addDropdown((dropdown) => {
-				for (const [value, label] of layouts) dropdown.addOption(value, label);
-				dropdown.setValue(settings[layoutKey]).onChange(async (value) => {
-					settings[layoutKey] = value as VideoLayout & ChannelLayout;
-					syncColumns();
-					await commit(false);
-				});
-			});
-			syncColumns();
-		};
-		mobileRow(
-			"Video layout on mobile",
-			"",
-			[
-				["vertical", "Vertical"],
-				["horizontal", "Horizontal"],
-			],
-			"mobileVideoLayout",
-			"mobileColumns",
-		);
-		divider(mobile);
-		mobileRow(
-			"Channel card layout on mobile",
-			"",
-			[
-				["horizontal", "Horizontal"],
-				["vertical", "Vertical"],
-			],
-			"mobileChannelLayout",
-			"mobileChannelColumns",
-		);
 
 		const support = group("Support");
 
