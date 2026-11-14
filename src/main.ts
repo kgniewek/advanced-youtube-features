@@ -1443,11 +1443,7 @@ export default class YouTubeGalleryPlugin extends Plugin {
 			const rect = el.getBoundingClientRect();
 			const x = Math.min(Math.max(0, left), Math.max(0, window.innerWidth - rect.width));
 			const y = Math.min(Math.max(0, top), Math.max(0, window.innerHeight - rect.height));
-			el.style.setProperty("left", `${x}px`);
-			el.style.setProperty("top", `${y}px`);
-			el.style.setProperty("right", "auto");
-			el.style.setProperty("bottom", "auto");
-			el.style.setProperty("transform", "none");
+			el.setCssProps({ left: `${x}px`, top: `${y}px`, right: "auto", bottom: "auto", transform: "none" });
 		};
 
 		let grab: { dx: number; dy: number } | null = null;
