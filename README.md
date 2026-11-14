@@ -4,15 +4,15 @@ YouTube links turn into a clean gallery with titles, channels, views and more.
 
 ![YouTube links shown as a gallery of thumbnails](images/gallery.webp)
 
-### Watch without leaving your notes
+### Watch videos without leaving your notes
 
-Play any video in a floating player that you can drag, resize and keep open while you write. Autoplay continues with the next video in the gallery.
+Play any video in a floating player that you can drag and resize.
 
 ![Floating video player over a note](images/floating-player.webp)
 
 ### A dedicated page for every channel
 
-Open a channel in its own tab, with its details and videos, sorted by newest, oldest or most popular.
+Open a channel in its own tab, with details and sortable videos.
 
 ![Dedicated channel page with sorting](images/channel-page.webp)
 
