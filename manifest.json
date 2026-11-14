@@ -1,0 +1,10 @@
+{
+  "id": "advanced-youtube-features",
+  "name": "Advanced YouTube Features",
+  "version": "1.0.0",
+  "minAppVersion": "1.4.0",
+  "description": "Turn YouTube links into thumbnail galleries, channel cards and playlists, and watch videos in a floating player without leaving your notes.",
+  "author": "kgniewek",
+  "fundingUrl": "https://buymeacoffee.com/kgniewek",
+  "isDesktopOnly": false
+}
