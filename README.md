@@ -1,28 +1,22 @@
-# Advanced YouTube Features
+### Your YouTube links, as a thumbnail gallery
 
-Turn YouTube links in your notes into clean thumbnail galleries, channel cards and playlists, then watch any video in a floating player without leaving Obsidian.
-
-Everything works in **Reading View**. Your notes stay plain Markdown: links are never rewritten, only displayed differently.
-
-## Your YouTube links, as a thumbnail gallery
-
-Paste video links on their own lines and they turn into a clean gallery with titles, channels, views and durations. Right-click any video for quick actions.
+YouTube links turn into a clean gallery with titles, channels, views and more.
 
 ![YouTube links shown as a gallery of thumbnails](images/gallery.webp)
 
-## Watch without leaving your notes
+### Watch without leaving your notes
 
 Play any video in a floating player that you can drag, resize and keep open while you write. Autoplay continues with the next video in the gallery.
 
 ![Floating video player over a note](images/floating-player.webp)
 
-## A dedicated page for every channel
+### A dedicated page for every channel
 
 Open a channel in its own tab, with its details and videos, sorted by newest, oldest or most popular.
 
 ![Dedicated channel page with sorting](images/channel-page.webp)
 
-## Highlights
+### Highlights
 
 - **Thumbnail galleries** from plain video links, with titles, channels, views and durations.
 - **Channel cards and playlists** from channel and playlist links, with a "Load more" button for long playlists.
@@ -30,33 +24,33 @@ Open a channel in its own tab, with its details and videos, sorted by newest, ol
 - **Channel pages** that open in their own tab, sortable by newest, oldest or most popular.
 - **Works out of the box.** No account or API key needed; an optional free key unlocks extra details.
 
-## Features
+### Features
 
-### Galleries
+#### Galleries
 - Consecutive video links become a thumbnail gallery. Links in a list work too.
 - Channel links (`@handle`, `/channel/ID`, `/c/name`, `/user/name`) become profile cards with subscriber and video counts.
 - Playlist links become a header (title, creator, video count, views, description) above a gallery of the playlist's videos.
 - Vertical or horizontal layouts, 1 to 4 videos per row, spacing, title size, title lines, hover effects and optional icons for statistics.
 - Separate layout settings for mobile, so a synced vault looks right on every device.
 
-### Player
+#### Player
 - Play videos in a small floating window. Drag it by the top bar and resize it from the sides or bottom; the video keeps its proportions.
 - Previous and next buttons, copy link, open in browser, and **autoplay** to continue with the next video of the gallery or playlist.
 - `Ctrl` / `Cmd` + click opens the browser instead.
 
-### Channel pages
+#### Channel pages
 - Open a channel in its own tab inside Obsidian, with its details and a gallery of its videos.
 - Sort by newest, oldest or most popular.
 
-### Right-click menu
+#### Right-click menu
 - Open in browser, play in Obsidian, copy link or title, and open the video's channel page.
 
-### Tools
+#### Tools
 - Paste a lone YouTube link and get a titled Markdown link automatically.
 - Add titles to bare YouTube links across your vault.
 - Shorten video links to `youtu.be/ID` (start times are kept).
 
-## Installation
+#### Installation
 
 **From Community plugins**
 
@@ -69,7 +63,7 @@ Open a channel in its own tab, with its details and videos, sorted by newest, ol
 2. Put them in `<your vault>/.obsidian/plugins/advanced-youtube-features/`.
 3. Reload Obsidian and enable the plugin under **Settings → Community plugins**.
 
-## Usage
+#### Usage
 
 Put YouTube links on their own lines:
 
@@ -90,7 +84,7 @@ Markdown links work as well, and their text is used as the title:
 
 Switch the note to Reading View to see the galleries. All options are under **Settings → Advanced YouTube Features**.
 
-## Optional YouTube Data API key
+#### Optional YouTube Data API key
 
 Everything basic works without a key. A free YouTube Data API key adds:
 
@@ -103,7 +97,7 @@ To get one, use the links under **YouTube API** in the settings to enable the Yo
 
 Without a key, channel page sorting and playlist details are read from YouTube's public pages on a best-effort basis. YouTube can change those pages, so some details may occasionally be missing.
 
-## Network use and privacy
+#### Network use and privacy
 
 The plugin needs the internet to show YouTube data. It contacts:
 
@@ -116,21 +110,21 @@ Fetched details are cached in the plugin's data file so they aren't requested ag
 
 **Saved data:** details fetched from YouTube (titles, channels, playlists, durations) are cached for at most 28 days, then removed and fetched again, in line with YouTube's API policy on stored data. Your API key stays until you remove it.
 
-## Limitations
+#### Limitations
 
 - Galleries show in Reading View only, not in Live Preview or Source mode.
 - Private and deleted videos are shown as unavailable.
 
-## Support
+#### Support
 
 Found a bug or have a suggestion? Email [contact@kgniewek.com](mailto:contact@kgniewek.com).
 
 If you enjoy the plugin, you can [buy me a coffee](https://buymeacoffee.com/kgniewek).
 
-## Disclaimer
+#### Disclaimer
 
 This is an independent project. It is **not affiliated with, endorsed by or sponsored by YouTube or Google**. YouTube is a trademark of Google LLC. Videos play in YouTube's own embedded player, and you are responsible for using the plugin in line with YouTube's Terms of Service.
 
-## License
+#### License
 
 Copyright (c) 2026 Krzysztof Gniewek. All rights reserved. The source is visible for transparency, but copying, modifying or redistributing it is not permitted. See [LICENSE](LICENSE).
