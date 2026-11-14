@@ -52,6 +52,7 @@ interface ChannelInfo {
 
 type ChannelLayout = "horizontal" | "vertical";
 type VideoLayout = "horizontal" | "vertical";
+type CardBackground = "transparent" | "padded" | "edge";
 
 interface YouTubeGallerySettings {
 	videoLinks: boolean;
@@ -64,6 +65,7 @@ interface YouTubeGallerySettings {
 	autoplayNext: boolean;
 	columns: number;
 	channelColumns: number;
+	cardBackground: CardBackground;
 	videoLayout: VideoLayout;
 	mobileVideoLayout: VideoLayout;
 	mobileChannelLayout: ChannelLayout;
@@ -108,6 +110,7 @@ const DEFAULT_SETTINGS: YouTubeGallerySettings = {
 	autoplayNext: false,
 	columns: 3,
 	channelColumns: 3,
+	cardBackground: "transparent",
 	videoLayout: "vertical",
 	mobileVideoLayout: "vertical",
 	mobileChannelLayout: "horizontal",
@@ -838,7 +841,7 @@ export default class YouTubeGalleryPlugin extends Plugin {
 	onunload(): void {
 		this.closePlayer();
 		this.persistSoon.run();
-		document.body.classList.remove("ytg-zoom", "ytg-hovercard");
+		document.body.classList.remove("ytg-zoom", "ytg-hovercard", "ytg-filled", "ytg-edge");
 		for (const name of ["--ytg-columns", "--ytg-channel-columns", "--ytg-channel-scale", "--ytg-mt", "--ytg-mb", "--ytg-title-size", "--ytg-title-lines", "--ytg-avatar-size", "--ytg-hgap", "--ytg-vgap", "--ytg-player-width", "--file-line-width"]) {
 			document.body.style.removeProperty(name);
 		}
@@ -862,6 +865,8 @@ export default class YouTubeGalleryPlugin extends Plugin {
 		s.channelColumns = clamp(s.channelColumns, 1, 4, 3);
 		s.mobileColumns = clamp(s.mobileColumns, 1, 3, 2);
 		s.mobileChannelColumns = clamp(s.mobileChannelColumns, 1, 3, 2);
+		if ((s.cardBackground as string) === "filled") s.cardBackground = "padded";
+		if (s.cardBackground !== "padded" && s.cardBackground !== "edge") s.cardBackground = "transparent";
 		if (s.mobileVideoLayout !== "horizontal") s.mobileVideoLayout = "vertical";
 		if (s.mobileChannelLayout !== "vertical") s.mobileChannelLayout = "horizontal";
 		s.marginTop = clamp(s.marginTop, 0, 64, 16);
@@ -906,6 +911,8 @@ export default class YouTubeGalleryPlugin extends Plugin {
 		const body = document.body;
 		body.classList.toggle("ytg-zoom", s.hoverZoom);
 		body.classList.toggle("ytg-hovercard", s.hoverCard);
+		body.classList.toggle("ytg-filled", s.cardBackground !== "transparent");
+		body.classList.toggle("ytg-edge", s.cardBackground === "edge");
 		const mobile = Platform.isMobile;
 		const videoLayout = mobile ? s.mobileVideoLayout : s.videoLayout;
 		const channelLayout = mobile ? s.mobileChannelLayout : s.channelLayout;
@@ -2526,6 +2533,20 @@ class YouTubeGallerySettingTab extends PluginSettingTab {
 
 		const appearance = group("Appearance");
 
+		new Setting(appearance)
+			.setName("Card background")
+			.addDropdown((dropdown) =>
+				dropdown
+					.addOption("transparent", "Transparent")
+					.addOption("padded", "Padded")
+					.addOption("edge", "Edge to edge")
+					.setValue(settings.cardBackground)
+					.onChange(async (value) => {
+						settings.cardBackground = value as CardBackground;
+						await commit(false);
+					}),
+			);
+		divider(appearance);
 		new Setting(appearance)
 			.setName("Video layout")
 			.addDropdown((dropdown) =>

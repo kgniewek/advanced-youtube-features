@@ -61,6 +61,57 @@ body.ytg-hovercard .ytg-channels .ytg-item:focus-visible {
 	background-color: var(--background-modifier-hover);
 }
 
+/* Filled card background: visible at rest, all cards as tall as the tallest */
+
+body.ytg-filled .ytg-videos .ytg-item,
+body.ytg-filled .ytg-channels .ytg-item {
+	margin: 0;
+	padding: 8px;
+	align-self: stretch;
+	box-sizing: border-box;
+	border: 1px solid var(--background-modifier-border);
+	background-color: var(--background-secondary);
+	transition: background-color 150ms ease, border-color 150ms ease;
+}
+
+body.ytg-filled .ytg-videos .ytg-item:hover,
+body.ytg-filled .ytg-videos .ytg-item:focus-visible,
+body.ytg-filled .ytg-channels .ytg-item:hover,
+body.ytg-filled .ytg-channels .ytg-item:focus-visible {
+	border-color: var(--background-modifier-border-hover);
+}
+
+body.ytg-filled .ytg-gallery:not(:has(> .ytg-total)) {
+	grid-auto-rows: 1fr;
+}
+
+body.ytg-filled .ytg-channels .ytg-channel-card {
+	height: 100%;
+}
+
+/* Edge to edge: video thumbnails touch the card border on top, left and right */
+
+body.ytg-edge .ytg-videos .ytg-item {
+	padding: 0;
+	overflow: hidden;
+}
+
+body.ytg-edge .ytg-videos .ytg-thumb {
+	border-radius: 0;
+}
+
+body.ytg-edge .ytg-videos .ytg-video-text {
+	padding: 2px 10px 10px;
+}
+
+body.ytg-edge.ytg-videos-horizontal .ytg-videos .ytg-item {
+	gap: 0;
+}
+
+body.ytg-edge.ytg-videos-horizontal .ytg-videos .ytg-video-text {
+	padding: 10px;
+}
+
 .ytg-item:focus-visible {
 	outline: 2px solid var(--background-modifier-border-focus);
 	outline-offset: 2px;

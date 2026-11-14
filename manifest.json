@@ -1,7 +1,7 @@
 {
   "id": "advanced-youtube-features",
   "name": "Advanced YouTube Features",
-  "version": "1.0.2",
+  "version": "1.0.3",
   "minAppVersion": "1.7.2",
   "description": "Turn YouTube links into thumbnail galleries, channel cards and playlists, and watch videos in a floating player without leaving your notes.",
   "author": "kgniewek",
