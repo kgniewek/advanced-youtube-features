@@ -31,7 +31,7 @@ Open a channel in its own tab, with details and sortable videos.
 - Channel links (`@handle`, `/channel/ID`, `/c/name`, `/user/name`) become profile cards with subscriber and video counts.
 - Playlist links become a header (title, creator, video count, views, description) above a gallery of the playlist's videos.
 - Vertical or horizontal layouts, 1 to 4 videos per row, spacing, title size, title lines, hover effects and optional icons for statistics.
-- Separate layout settings for mobile, so a synced vault looks right on every device.
+- Works well on mobile, with the same layout settings as on desktop. If you sync your vault, it is recommended not to sync this plugin's settings, so you can keep different settings on your phone and your computer: with Obsidian Sync, leave community plugin syncing off (the default); with Git, add `.obsidian/plugins/advanced-youtube-features/data.json` to your `.gitignore`.
 
 #### Player
 - Play videos in a small floating window. Drag it by the top bar and resize it from the sides or bottom; the video keeps its proportions.

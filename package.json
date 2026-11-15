@@ -4,8 +4,8 @@
   "description": "Turn YouTube links into thumbnail galleries, channel cards and playlists, and watch videos in a floating player without leaving your notes.",
   "main": "main.js",
   "scripts": {
-    "dev": "esbuild src/main.ts --bundle --external:obsidian --external:electron --external:@codemirror/* --external:@lezer/* --format=cjs --target=es2020 --sourcemap=inline --outfile=main.js --watch",
-    "build": "tsc --noEmit --skipLibCheck && esbuild src/main.ts --bundle --external:obsidian --external:electron --external:@codemirror/* --external:@lezer/* --format=cjs --target=es2020 --minify --outfile=main.js"
+    "dev": "esbuild main.ts --bundle --external:obsidian --external:electron --external:@codemirror/* --external:@lezer/* --format=cjs --target=es2020 --sourcemap=inline --outfile=main.js --watch",
+    "build": "tsc --noEmit --skipLibCheck && esbuild main.ts --bundle --external:obsidian --external:electron --external:@codemirror/* --external:@lezer/* --format=cjs --target=es2020 --minify --outfile=main.js"
   },
   "keywords": ["obsidian", "obsidian-plugin", "youtube"],
   "license": "UNLICENSED",

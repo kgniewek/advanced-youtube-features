@@ -89,10 +89,23 @@ interface YouTubeGallerySettings {
 	showTotalDuration: boolean;
 	channelSorting: boolean;
 	titleOnPaste: boolean;
+	preloadImages: boolean;
 	apiKey: string;
 	cache: Record<string, VideoInfo>;
 	channelCache: Record<string, ChannelInfo>;
 	playlistCache: Record<string, PlaylistInfo>;
+}
+
+/** How far ahead of the visible area thumbnails start loading when preloading is on. */
+const PRELOAD_MARGIN = 800;
+
+/** The nearest ancestor that scrolls, which is what decides what is "in view" inside Obsidian. */
+function scrollParent(el: HTMLElement): Element | null {
+	for (let node = el.parentElement; node; node = node.parentElement) {
+		const overflow = getComputedStyle(node).overflowY;
+		if (overflow === "auto" || overflow === "scroll") return node;
+	}
+	return null;
 }
 
 const DEFAULT_SETTINGS: YouTubeGallerySettings = {
@@ -108,7 +121,7 @@ const DEFAULT_SETTINGS: YouTubeGallerySettings = {
 	channelColumns: 3,
 	cardBackground: "transparent",
 	videoLayout: "vertical",
-	channelLayout: "horizontal",
+	channelLayout: "vertical",
 	hoverZoom: true,
 	hoverCard: true,
 	marginTop: 16,
@@ -129,7 +142,8 @@ const DEFAULT_SETTINGS: YouTubeGallerySettings = {
 	showPublished: false,
 	showTotalDuration: false,
 	channelSorting: false,
-	titleOnPaste: false,
+	titleOnPaste: true,
+	preloadImages: true,
 	apiKey: "",
 	cache: {},
 	channelCache: {},
@@ -474,6 +488,28 @@ function markdownLink(title: string, url: string): string {
 	return `[${label}](${target})`;
 }
 
+/**
+ * Removes the first line of a note that holds nothing but a link to `href` (bare URL, <URL> or
+ * [text](URL), optionally behind a list or task marker). Returns null when no such line exists.
+ */
+function removeLinkLine(data: string, href: string): string | null {
+	const target = safeUrl(href)?.href;
+	if (!target) return null;
+	const lines = data.split("\n");
+	const marker = /^(?:\s*(?:[-*+]|\d+[.)])\s+)?(?:\[[ xX]\]\s+)?/;
+	const link = /^(?:\[(?:\\.|[^\]\\])*\]\((?:<([^>]+)>|([^)\s]+))(?:\s+"[^"]*")?\)|<([^>]+)>|(\S+))$/;
+	for (let i = 0; i < lines.length; i++) {
+		const rest = lines[i].replace(/\r$/, "").replace(marker, "").trim();
+		const match = link.exec(rest);
+		const found = match ? (match[1] ?? match[2] ?? match[3] ?? match[4]) : undefined;
+		if (found && safeUrl(found)?.href === target) {
+			lines.splice(i, 1);
+			return lines.join("\n");
+		}
+	}
+	return null;
+}
+
 function plural(count: number, noun: string): string {
 	return `${count} ${noun}${count === 1 ? "" : "s"}`;
 }
@@ -815,6 +851,7 @@ export default class YouTubeGalleryPlugin extends Plugin {
 	private failed = new Set<string>();
 	private unavailable = new Set<string>();
 	private apiBroken = false;
+	private renderSource = "";
 	private persistSoon = debounce(() => void this.saveSettings(), 2000, true);
 
 	async onload(): Promise<void> {
@@ -822,7 +859,10 @@ export default class YouTubeGalleryPlugin extends Plugin {
 		this.refresh(false);
 
 		this.addSettingTab(new YouTubeGallerySettingTab(this.app, this));
-		this.registerMarkdownPostProcessor((el) => this.processSection(el));
+		this.registerMarkdownPostProcessor((el, ctx) => {
+			this.renderSource = ctx.sourcePath;
+			this.processSection(el);
+		});
 		this.registerView(VIEW_CHANNEL, (leaf) => new ChannelView(leaf, this));
 
 		this.registerEvent(this.app.workspace.on("editor-paste", (evt, editor) => this.handlePaste(evt, editor)));
@@ -832,6 +872,9 @@ export default class YouTubeGalleryPlugin extends Plugin {
 
 	onunload(): void {
 		this.closePlayer();
+		for (const observer of this.observers) observer.disconnect();
+		this.observers.clear();
+		this.observerMap = new WeakMap();
 		this.persistSoon.run();
 		document.body.classList.remove("ytg-zoom", "ytg-hovercard", "ytg-filled", "ytg-edge");
 		for (const name of ["--ytg-columns", "--ytg-channel-columns", "--ytg-channel-scale", "--ytg-mt", "--ytg-mb", "--ytg-title-size", "--ytg-title-lines", "--ytg-avatar-size", "--ytg-hgap", "--ytg-vgap", "--ytg-player-width", "--file-line-width"]) {
@@ -980,6 +1023,40 @@ export default class YouTubeGalleryPlugin extends Plugin {
 		});
 	}
 
+	/** Deletes the line holding this link from the note, without leaving reading mode. */
+	private removeLinkFromNote(sourcePath: string, href: string, el: HTMLElement, after?: () => void): void {
+		const file = this.app.vault.getAbstractFileByPath(sourcePath);
+		if (!(file instanceof TFile)) {
+			new Notice("Could not find the note this link is in.");
+			return;
+		}
+		void this.removeLink(file, href, el, after);
+	}
+
+	private async removeLink(file: TFile, href: string, el: HTMLElement, after?: () => void): Promise<void> {
+		let found = false;
+		try {
+			await this.app.vault.process(file, (data) => {
+				const result = removeLinkLine(data, href);
+				if (result === null) return data;
+				found = true;
+				return result;
+			});
+		} catch {
+			new Notice("The note could not be changed.");
+			return;
+		}
+		if (!found) {
+			new Notice("Could not find this link as its own line in the note.");
+			return;
+		}
+		after?.();
+		const gallery = el.parentElement;
+		el.remove();
+		if (gallery && !gallery.querySelector(".ytg-item, .ytg-playlist")) gallery.remove();
+		new Notice("Link removed.");
+	}
+
 	private async copyText(text: string, done: string): Promise<void> {
 		try {
 			await navigator.clipboard.writeText(text);
@@ -989,10 +1066,11 @@ export default class YouTubeGalleryPlugin extends Plugin {
 		}
 	}
 
-	private attachMenu(link: HTMLAnchorElement, href: string, videoId: string | undefined, getText: () => string, play?: () => void, openChannel?: () => void): void {
+	private attachMenu(link: HTMLAnchorElement, href: string, videoId: string | undefined, getText: () => string, play?: () => void, openChannel?: () => void, remove?: () => void): void {
 		link.addEventListener("contextmenu", (evt) => {
 			evt.preventDefault();
 			const menu = new Menu();
+			(menu as Menu & { dom?: HTMLElement }).dom?.addClass("ytg-menu");
 			menu.addItem((item) =>
 				item.setTitle("Open in browser").setIcon("external-link").onClick(() => window.open(href, "_blank")),
 			);
@@ -1036,6 +1114,10 @@ export default class YouTubeGalleryPlugin extends Plugin {
 					.setIcon("copy")
 					.onClick(() => void this.copyText(getText(), videoId ? "Title copied." : "Name copied.")),
 			);
+			if (remove) {
+				menu.addSeparator();
+				menu.addItem((item) => item.setTitle("Remove link").setIcon("trash-2").setWarning(true).onClick(remove));
+			}
 			menu.showAtMouseEvent(evt);
 		});
 	}
@@ -1348,9 +1430,10 @@ export default class YouTubeGalleryPlugin extends Plugin {
 	}
 
 	private buildGallery(kind: Kind, items: LinkItem[]): HTMLElement {
+		const sourcePath = this.renderSource;
 		if (kind === "playlist") {
 			const list = createDiv({ cls: "ytg-playlists" });
-			for (const item of items) if (item.playlistId) this.renderPlaylist(list, item, item.playlistId);
+			for (const item of items) if (item.playlistId) this.renderPlaylist(list, item, item.playlistId, sourcePath);
 			return list;
 		}
 		const gallery = createDiv({
@@ -1358,8 +1441,8 @@ export default class YouTubeGalleryPlugin extends Plugin {
 		});
 		const queue: VideoQueue = { items: [] };
 		for (const item of items) {
-			if (kind === "video" && item.videoId) this.renderVideo(gallery, item, item.videoId, undefined, queue);
-			else if (kind === "channel" && item.channel) this.renderChannel(gallery, item, item.channel);
+			if (kind === "video" && item.videoId) this.renderVideo(gallery, item, item.videoId, undefined, queue, sourcePath);
+			else if (kind === "channel" && item.channel) this.renderChannel(gallery, item, item.channel, sourcePath);
 		}
 		if (kind === "video" && items.length > 1 && this.settings.showTotalDuration && this.hasApiKey()) {
 			this.addGalleryTotal(gallery, items.flatMap((item) => (item.videoId ? [item.videoId] : [])));
@@ -1583,10 +1666,63 @@ export default class YouTubeGalleryPlugin extends Plugin {
 		});
 	}
 
+	private observers = new Set<IntersectionObserver>();
+	private observerMap = new WeakMap<object, Map<number, IntersectionObserver>>();
+	private pendingLoads = new WeakMap<Element, () => void>();
+
+	/**
+	 * Runs `start` when `el` comes within the preload distance of the visible area (or is visible, with preloading
+	 * off). Replaces the browser's own lazy loading, whose distance we cannot control.
+	 */
+	whenNear(el: HTMLElement, start: () => void): void {
+		if (typeof IntersectionObserver === "undefined") {
+			start();
+			return;
+		}
+		let frames = 0;
+		const attach = (): void => {
+			// The gallery is built before Obsidian puts it on screen, so wait until it is attached.
+			if (!el.isConnected) {
+				if (++frames < 600) window.requestAnimationFrame(attach);
+				return;
+			}
+			const margin = this.settings.preloadImages ? PRELOAD_MARGIN : 0;
+			const root = scrollParent(el);
+			const key: object = root ?? document;
+			let byMargin = this.observerMap.get(key);
+			if (!byMargin) {
+				byMargin = new Map();
+				this.observerMap.set(key, byMargin);
+			}
+			let observer = byMargin.get(margin);
+			if (!observer) {
+				const created: IntersectionObserver = new IntersectionObserver(
+					(entries) => {
+						for (const entry of entries) {
+							if (!entry.isIntersecting) continue;
+							created.unobserve(entry.target);
+							const run = this.pendingLoads.get(entry.target);
+							this.pendingLoads.delete(entry.target);
+							run?.();
+						}
+					},
+					{ root, rootMargin: `${margin}px 0px` },
+				);
+				observer = created;
+				byMargin.set(margin, created);
+				this.observers.add(created);
+			}
+			this.pendingLoads.set(el, start);
+			observer.observe(el);
+		};
+		attach();
+	}
+
 	createAvatar(parent: HTMLElement, large: boolean): { wrap: HTMLElement; img: HTMLImageElement } {
 		const wrap = parent.createSpan({ cls: large ? "ytg-avatar ytg-avatar-lg" : "ytg-avatar" });
-		const img = wrap.createEl("img", { attr: { alt: "", loading: "lazy" } });
+		const img = wrap.createEl("img", { attr: { alt: "", decoding: "async" } });
 		img.hide();
+		img.addEventListener("load", () => img.addClass("is-loaded"));
 		img.addEventListener("error", () => img.hide());
 		return { wrap, img };
 	}
@@ -1597,7 +1733,7 @@ export default class YouTubeGalleryPlugin extends Plugin {
 		img.show();
 	}
 
-	renderVideo(parent: HTMLElement, item: LinkItem, id: string, preset?: { channel?: string }, queue?: VideoQueue): void {
+	renderVideo(parent: HTMLElement, item: LinkItem, id: string, preset?: { channel?: string }, queue?: VideoQueue, sourcePath = ""): void {
 		const { titleSource, showChannel, showChannelPicture, showViews, showDuration, showPublished } = this.settings;
 
 		const link = parent.createEl("a", {
@@ -1610,13 +1746,7 @@ export default class YouTubeGalleryPlugin extends Plugin {
 		this.openLink(link, item.href, play);
 
 		const thumb = link.createDiv({ cls: "ytg-thumb" });
-		const img = thumb.createEl("img", {
-			attr: {
-				src: `https://i.ytimg.com/vi/${id}/maxresdefault.jpg`,
-				alt: "",
-				loading: "lazy",
-			},
-		});
+		const img = thumb.createEl("img", { attr: { alt: "", decoding: "async" } });
 		const sources = [
 			`https://i.ytimg.com/vi/${id}/maxresdefault.jpg`,
 			`https://i.ytimg.com/vi/${id}/mqdefault.jpg`,
@@ -1629,13 +1759,25 @@ export default class YouTubeGalleryPlugin extends Plugin {
 		};
 		img.addEventListener("error", next);
 		img.addEventListener("load", () => {
+			// YouTube answers a missing maxres picture with a tiny grey one: skip it, and only show finished images.
 			if (img.naturalWidth <= 120) next();
+			else img.addClass("is-loaded");
+		});
+		this.whenNear(thumb, () => {
+			img.src = sources[0];
 		});
 
 		const durationEl = showDuration ? thumb.createDiv({ cls: "ytg-badge ytg-duration" }) : null;
 		const textWrap = link.createDiv({ cls: "ytg-video-text" });
 		const titleEl = textWrap.createDiv({ cls: "ytg-title", text: item.label || FALLBACK_TITLE });
-		this.attachMenu(link, item.href, id, () => titleEl.textContent ?? "", play);
+		const remove = sourcePath
+			? (): void =>
+					this.removeLinkFromNote(sourcePath, item.href, link, () => {
+						const at = queue && entry ? queue.items.indexOf(entry) : -1;
+						if (queue && at >= 0) queue.items.splice(at, 1);
+					})
+			: undefined;
+		this.attachMenu(link, item.href, id, () => titleEl.textContent ?? "", play, undefined, remove);
 
 		const wantViews = showViews && this.hasApiKey();
 		const wantPublished = showPublished && this.hasApiKey();
@@ -1675,7 +1817,7 @@ export default class YouTubeGalleryPlugin extends Plugin {
 		});
 	}
 
-	private renderPlaylist(parent: HTMLElement, item: LinkItem, id: string): void {
+	private renderPlaylist(parent: HTMLElement, item: LinkItem, id: string, sourcePath = ""): void {
 		const block = parent.createDiv({ cls: "ytg-playlist" });
 		const header = block.createDiv({ cls: "ytg-playlist-header" });
 		const titleRow = header.createDiv({ cls: "ytg-playlist-titlerow" });
@@ -1686,7 +1828,15 @@ export default class YouTubeGalleryPlugin extends Plugin {
 			attr: { href: item.href, target: "_blank", rel: "noopener noreferrer" },
 		});
 		this.openLink(titleEl, item.href);
-		this.attachMenu(titleEl, item.href, undefined, () => titleEl.textContent ?? "");
+		this.attachMenu(
+			titleEl,
+			item.href,
+			undefined,
+			() => titleEl.textContent ?? "",
+			undefined,
+			undefined,
+			sourcePath ? () => this.removeLinkFromNote(sourcePath, item.href, block) : undefined,
+		);
 		const meta = header.createDiv({ cls: "ytg-playlist-meta" });
 		const descEl = header.createDiv({ cls: "ytg-playlist-desc" });
 		const body = block.createDiv();
@@ -1766,7 +1916,7 @@ export default class YouTubeGalleryPlugin extends Plugin {
 		});
 	}
 
-	private renderChannel(parent: HTMLElement, item: LinkItem, ref: ChannelRef): void {
+	private renderChannel(parent: HTMLElement, item: LinkItem, ref: ChannelRef, sourcePath = ""): void {
 		const link = parent.createEl("a", {
 			cls: "ytg-item ytg-channel-card",
 			attr: { href: item.href, target: "_blank", rel: "noopener noreferrer" },
@@ -1781,7 +1931,15 @@ export default class YouTubeGalleryPlugin extends Plugin {
 			text: item.label || (ref.handle ? `@${ref.handle}` : ref.key),
 		});
 		const statsEl = text.createDiv({ cls: "ytg-channel-stats" });
-		this.attachMenu(link, item.href, undefined, () => nameEl.textContent ?? "", undefined, openPage);
+		this.attachMenu(
+			link,
+			item.href,
+			undefined,
+			() => nameEl.textContent ?? "",
+			undefined,
+			openPage,
+			sourcePath ? () => this.removeLinkFromNote(sourcePath, item.href, link) : undefined,
+		);
 
 		void this.getChannelInfo(ref).then((channel) => {
 			if (!channel) return;
@@ -2776,6 +2934,15 @@ class YouTubeGallerySettingTab extends PluginSettingTab {
 			.addToggle((toggle) =>
 				toggle.setValue(settings.showVideoCount).onChange(async (value) => {
 					settings.showVideoCount = value;
+					await commit(true);
+				}),
+			);
+		divider(info);
+		new Setting(info)
+			.setName("Preload thumbnails before they come into view to prevent pop-in")
+			.addToggle((toggle) =>
+				toggle.setValue(settings.preloadImages).onChange(async (value) => {
+					settings.preloadImages = value;
 					await commit(true);
 				}),
 			);
