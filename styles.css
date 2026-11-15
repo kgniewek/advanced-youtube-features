@@ -130,7 +130,12 @@ body.ytg-edge.ytg-videos-horizontal .ytg-videos .ytg-video-text {
 	width: 100%;
 	height: 100%;
 	object-fit: contain;
-	transition: transform 200ms ease-in-out;
+	opacity: 0;
+	transition: opacity 200ms ease, transform 200ms ease-in-out;
+}
+
+.ytg-thumb img.is-loaded {
+	opacity: 1;
 }
 
 body.ytg-zoom .ytg-item:hover .ytg-thumb img,
@@ -139,7 +144,8 @@ body.ytg-zoom .ytg-item:focus-visible .ytg-thumb img {
 }
 
 @media (prefers-reduced-motion: reduce) {
-	.ytg-thumb img {
+	.ytg-thumb img,
+	.ytg-avatar img {
 		transition: none;
 	}
 }
@@ -231,6 +237,12 @@ body.ytg-zoom .ytg-item:focus-visible .ytg-thumb img {
 	width: 100%;
 	height: 100%;
 	object-fit: cover;
+	opacity: 0;
+	transition: opacity 200ms ease;
+}
+
+.ytg-avatar img.is-loaded {
+	opacity: 1;
 }
 
 .ytg-channel-card {

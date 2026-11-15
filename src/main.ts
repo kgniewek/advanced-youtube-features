@@ -67,10 +67,6 @@ interface YouTubeGallerySettings {
 	channelColumns: number;
 	cardBackground: CardBackground;
 	videoLayout: VideoLayout;
-	mobileVideoLayout: VideoLayout;
-	mobileChannelLayout: ChannelLayout;
-	mobileColumns: number;
-	mobileChannelColumns: number;
 	channelLayout: ChannelLayout;
 	hoverZoom: boolean;
 	hoverCard: boolean;
@@ -93,10 +89,23 @@ interface YouTubeGallerySettings {
 	showTotalDuration: boolean;
 	channelSorting: boolean;
 	titleOnPaste: boolean;
+	preloadImages: boolean;
 	apiKey: string;
 	cache: Record<string, VideoInfo>;
 	channelCache: Record<string, ChannelInfo>;
 	playlistCache: Record<string, PlaylistInfo>;
+}
+
+/** How far ahead of the visible area thumbnails start loading when preloading is on. */
+const PRELOAD_MARGIN = 800;
+
+/** The nearest ancestor that scrolls, which is what decides what is "in view" inside Obsidian. */
+function scrollParent(el: HTMLElement): Element | null {
+	for (let node = el.parentElement; node; node = node.parentElement) {
+		const overflow = getComputedStyle(node).overflowY;
+		if (overflow === "auto" || overflow === "scroll") return node;
+	}
+	return null;
 }
 
 const DEFAULT_SETTINGS: YouTubeGallerySettings = {
@@ -112,10 +121,6 @@ const DEFAULT_SETTINGS: YouTubeGallerySettings = {
 	channelColumns: 3,
 	cardBackground: "transparent",
 	videoLayout: "vertical",
-	mobileVideoLayout: "vertical",
-	mobileChannelLayout: "horizontal",
-	mobileColumns: 2,
-	mobileChannelColumns: 2,
 	channelLayout: "horizontal",
 	hoverZoom: true,
 	hoverCard: true,
@@ -137,7 +142,8 @@ const DEFAULT_SETTINGS: YouTubeGallerySettings = {
 	showPublished: false,
 	showTotalDuration: false,
 	channelSorting: false,
-	titleOnPaste: false,
+	titleOnPaste: true,
+	preloadImages: true,
 	apiKey: "",
 	cache: {},
 	channelCache: {},
@@ -840,6 +846,9 @@ export default class YouTubeGalleryPlugin extends Plugin {
 
 	onunload(): void {
 		this.closePlayer();
+		for (const observer of this.observers) observer.disconnect();
+		this.observers.clear();
+		this.observerMap = new WeakMap();
 		this.persistSoon.run();
 		document.body.classList.remove("ytg-zoom", "ytg-hovercard", "ytg-filled", "ytg-edge");
 		for (const name of ["--ytg-columns", "--ytg-channel-columns", "--ytg-channel-scale", "--ytg-mt", "--ytg-mb", "--ytg-title-size", "--ytg-title-lines", "--ytg-avatar-size", "--ytg-hgap", "--ytg-vgap", "--ytg-player-width", "--file-line-width"]) {
@@ -863,12 +872,19 @@ export default class YouTubeGalleryPlugin extends Plugin {
 		const s = this.settings;
 		s.columns = clamp(s.columns, 1, 4, 3);
 		s.channelColumns = clamp(s.channelColumns, 1, 4, 3);
-		s.mobileColumns = clamp(s.mobileColumns, 1, 3, 2);
-		s.mobileChannelColumns = clamp(s.mobileChannelColumns, 1, 3, 2);
 		if ((s.cardBackground as string) === "filled") s.cardBackground = "padded";
 		if (s.cardBackground !== "padded" && s.cardBackground !== "edge") s.cardBackground = "transparent";
-		if (s.mobileVideoLayout !== "horizontal") s.mobileVideoLayout = "vertical";
-		if (s.mobileChannelLayout !== "vertical") s.mobileChannelLayout = "horizontal";
+		if (s.videoLayout !== "horizontal") s.videoLayout = "vertical";
+		if (s.channelLayout !== "vertical") s.channelLayout = "horizontal";
+		// First run on a phone: 2 per row instead of the desktop 3 (nothing was saved yet).
+		if (Platform.isMobile) {
+			if (data?.columns === undefined) s.columns = 2;
+			if (data?.channelColumns === undefined) s.channelColumns = 2;
+		}
+		// The separate "on mobile app" settings no longer exist: drop what older versions saved.
+		for (const key of ["mobileVideoLayout", "mobileChannelLayout", "mobileColumns", "mobileChannelColumns"]) {
+			delete (s as unknown as Record<string, unknown>)[key];
+		}
 		s.marginTop = clamp(s.marginTop, 0, 64, 16);
 		s.marginBottom = clamp(s.marginBottom, 0, 64, 30);
 		s.titleSize = clamp(s.titleSize, 10, 22, 13);
@@ -914,10 +930,11 @@ export default class YouTubeGalleryPlugin extends Plugin {
 		body.classList.toggle("ytg-filled", s.cardBackground !== "transparent");
 		body.classList.toggle("ytg-edge", s.cardBackground === "edge");
 		const mobile = Platform.isMobile;
-		const videoLayout = mobile ? s.mobileVideoLayout : s.videoLayout;
-		const channelLayout = mobile ? s.mobileChannelLayout : s.channelLayout;
-		const columns = mobile ? (videoLayout === "horizontal" ? 1 : s.mobileColumns) : s.columns;
-		const channelColumns = mobile ? (channelLayout === "horizontal" ? 1 : s.mobileChannelColumns) : s.channelColumns;
+		// Same settings on every device; a phone just never goes past 3 per row, and wide (horizontal) cards take a full row.
+		const videoLayout = s.videoLayout;
+		const channelLayout = s.channelLayout;
+		const columns = mobile ? (videoLayout === "horizontal" ? 1 : Math.min(s.columns, 3)) : s.columns;
+		const channelColumns = mobile ? (channelLayout === "horizontal" ? 1 : Math.min(s.channelColumns, 3)) : s.channelColumns;
 		body.classList.toggle("ytg-videos-horizontal", videoLayout === "horizontal");
 		body.classList.toggle("ytg-channels-vertical", channelLayout === "vertical");
 		body.style.setProperty("--ytg-columns", String(columns));
@@ -1583,10 +1600,63 @@ export default class YouTubeGalleryPlugin extends Plugin {
 		});
 	}
 
+	private observers = new Set<IntersectionObserver>();
+	private observerMap = new WeakMap<object, Map<number, IntersectionObserver>>();
+	private pendingLoads = new WeakMap<Element, () => void>();
+
+	/**
+	 * Runs `start` when `el` comes within the preload distance of the visible area (or is visible, with preloading
+	 * off). Replaces the browser's own lazy loading, whose distance we cannot control.
+	 */
+	whenNear(el: HTMLElement, start: () => void): void {
+		if (typeof IntersectionObserver === "undefined") {
+			start();
+			return;
+		}
+		let frames = 0;
+		const attach = (): void => {
+			// The gallery is built before Obsidian puts it on screen, so wait until it is attached.
+			if (!el.isConnected) {
+				if (++frames < 600) window.requestAnimationFrame(attach);
+				return;
+			}
+			const margin = this.settings.preloadImages ? PRELOAD_MARGIN : 0;
+			const root = scrollParent(el);
+			const key: object = root ?? document;
+			let byMargin = this.observerMap.get(key);
+			if (!byMargin) {
+				byMargin = new Map();
+				this.observerMap.set(key, byMargin);
+			}
+			let observer = byMargin.get(margin);
+			if (!observer) {
+				const created: IntersectionObserver = new IntersectionObserver(
+					(entries) => {
+						for (const entry of entries) {
+							if (!entry.isIntersecting) continue;
+							created.unobserve(entry.target);
+							const run = this.pendingLoads.get(entry.target);
+							this.pendingLoads.delete(entry.target);
+							run?.();
+						}
+					},
+					{ root, rootMargin: `${margin}px 0px` },
+				);
+				observer = created;
+				byMargin.set(margin, created);
+				this.observers.add(created);
+			}
+			this.pendingLoads.set(el, start);
+			observer.observe(el);
+		};
+		attach();
+	}
+
 	createAvatar(parent: HTMLElement, large: boolean): { wrap: HTMLElement; img: HTMLImageElement } {
 		const wrap = parent.createSpan({ cls: large ? "ytg-avatar ytg-avatar-lg" : "ytg-avatar" });
-		const img = wrap.createEl("img", { attr: { alt: "", loading: "lazy" } });
+		const img = wrap.createEl("img", { attr: { alt: "", decoding: "async" } });
 		img.hide();
+		img.addEventListener("load", () => img.addClass("is-loaded"));
 		img.addEventListener("error", () => img.hide());
 		return { wrap, img };
 	}
@@ -1610,13 +1680,7 @@ export default class YouTubeGalleryPlugin extends Plugin {
 		this.openLink(link, item.href, play);
 
 		const thumb = link.createDiv({ cls: "ytg-thumb" });
-		const img = thumb.createEl("img", {
-			attr: {
-				src: `https://i.ytimg.com/vi/${id}/maxresdefault.jpg`,
-				alt: "",
-				loading: "lazy",
-			},
-		});
+		const img = thumb.createEl("img", { attr: { alt: "", decoding: "async" } });
 		const sources = [
 			`https://i.ytimg.com/vi/${id}/maxresdefault.jpg`,
 			`https://i.ytimg.com/vi/${id}/mqdefault.jpg`,
@@ -1629,7 +1693,12 @@ export default class YouTubeGalleryPlugin extends Plugin {
 		};
 		img.addEventListener("error", next);
 		img.addEventListener("load", () => {
+			// YouTube answers a missing maxres picture with a tiny grey one: skip it, and only show finished images.
 			if (img.naturalWidth <= 120) next();
+			else img.addClass("is-loaded");
+		});
+		this.whenNear(thumb, () => {
+			img.src = sources[0];
 		});
 
 		const durationEl = showDuration ? thumb.createDiv({ cls: "ytg-badge ytg-duration" }) : null;
@@ -2578,18 +2647,14 @@ class YouTubeGallerySettingTab extends PluginSettingTab {
 			new Setting(appearance)
 				.setName(name)
 				.setDesc(desc)
-				.addDropdown((dropdown) =>
-					dropdown
-						.addOption("1", "1")
-						.addOption("2", "2")
-						.addOption("3", "3")
-						.addOption("4", "4")
-						.setValue(String(settings[key]))
-						.onChange(async (value) => {
-							settings[key] = Number(value);
-							await commit(false);
-						}),
-				);
+				.addDropdown((dropdown) => {
+					dropdown.addOption("1", "1").addOption("2", "2").addOption("3", "3");
+					if (!Platform.isMobile) dropdown.addOption("4", "4");
+					dropdown.setValue(String(Math.min(settings[key], Platform.isMobile ? 3 : 4))).onChange(async (value) => {
+						settings[key] = Number(value);
+						await commit(false);
+					});
+				});
 		};
 		perRow("Video thumbnails per row", "", "columns");
 		divider(appearance);
@@ -2701,62 +2766,6 @@ class YouTubeGallerySettingTab extends PluginSettingTab {
 			showWidthControls(settings.customNoteWidth);
 		}
 
-		divider(appearance);
-		const mobileRow = (
-			name: string,
-			desc: string,
-			layouts: [string, string][],
-			layoutKey: "mobileVideoLayout" | "mobileChannelLayout",
-			columnsKey: "mobileColumns" | "mobileChannelColumns",
-		): void => {
-			const setting = new Setting(appearance).setName(name).setDesc(desc);
-			let columnsEl: HTMLSelectElement | null = null;
-			const syncColumns = (): void => {
-				columnsEl?.toggle(settings[layoutKey] !== "horizontal");
-			};
-			setting.addDropdown((dropdown) => {
-				columnsEl = dropdown.selectEl;
-				dropdown
-					.addOption("1", "1 per row")
-					.addOption("2", "2 per row")
-					.addOption("3", "3 per row")
-					.setValue(String(settings[columnsKey]))
-					.onChange(async (value) => {
-						settings[columnsKey] = Number(value);
-						await commit(false);
-					});
-			});
-			setting.addDropdown((dropdown) => {
-				for (const [value, label] of layouts) dropdown.addOption(value, label);
-				dropdown.setValue(settings[layoutKey]).onChange(async (value) => {
-					settings[layoutKey] = value as VideoLayout & ChannelLayout;
-					syncColumns();
-					await commit(false);
-				});
-			});
-			syncColumns();
-		};
-		mobileRow(
-			"Video layout on mobile app",
-			"",
-			[
-				["vertical", "Vertical"],
-				["horizontal", "Horizontal"],
-			],
-			"mobileVideoLayout",
-			"mobileColumns",
-		);
-		divider(appearance);
-		mobileRow(
-			"Channel card layout on mobile app",
-			"",
-			[
-				["horizontal", "Horizontal"],
-				["vertical", "Vertical"],
-			],
-			"mobileChannelLayout",
-			"mobileChannelColumns",
-		);
 
 		const info = group("Information");
 
@@ -2836,6 +2845,15 @@ class YouTubeGallerySettingTab extends PluginSettingTab {
 			.addToggle((toggle) =>
 				toggle.setValue(settings.showVideoCount).onChange(async (value) => {
 					settings.showVideoCount = value;
+					await commit(true);
+				}),
+			);
+		divider(info);
+		new Setting(info)
+			.setName("Preload thumbnails before they come into view to prevent pop-in")
+			.addToggle((toggle) =>
+				toggle.setValue(settings.preloadImages).onChange(async (value) => {
+					settings.preloadImages = value;
 					await commit(true);
 				}),
 			);
