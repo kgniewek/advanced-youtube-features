@@ -11,7 +11,6 @@ import {
 	Plugin,
 	PluginSettingTab,
 	Setting,
-	type SettingDefinitionItem,
 	TFile,
 	ViewStateResult,
 	WorkspaceLeaf,
@@ -2627,19 +2626,6 @@ export default class YouTubeGalleryPlugin extends Plugin {
 	}
 }
 
-interface SettingRow {
-	name: string;
-	desc?: string;
-	build: (setting: Setting) => void;
-}
-
-interface SettingGroup {
-	heading: string;
-	rows: SettingRow[];
-}
-
-type SliderKey = "marginTop" | "marginBottom" | "titleSize" | "avatarSize" | "gapHorizontal" | "gapVertical" | "playerWidth";
-
 class YouTubeGallerySettingTab extends PluginSettingTab {
 	constructor(
 		app: App,
@@ -2648,416 +2634,530 @@ class YouTubeGallerySettingTab extends PluginSettingTab {
 		super(app, plugin);
 	}
 
-	private async commit(rerender: boolean): Promise<void> {
-		await this.plugin.saveSettings();
-		this.plugin.refresh(rerender);
-	}
-
-	private rerenderTab(): void {
-		if (typeof this.update === "function") this.update();
-		else this.renderLegacy();
-	}
-
-	private toggleRow(name: string, key: "videoLinks" | "channelLinks" | "playlistLinks" | "playInObsidian" | "channelPage" | "hoverCard" | "hoverZoom" | "showSubscribers" | "showVideoCount" | "preloadImages" | "showViews" | "showDuration" | "showPublished" | "showTotalDuration" | "channelSorting" | "titleOnPaste", rerender: boolean): SettingRow {
+	display(): void {
+		const { containerEl } = this;
 		const settings = this.plugin.settings;
-		return {
-			name,
-			build: (setting) =>
-				setting.addToggle((toggle) =>
-					toggle.setValue(settings[key]).onChange(async (value) => {
-						settings[key] = value;
-						await this.commit(rerender);
-					}),
-				),
+		containerEl.empty();
+
+		const commit = async (rerender: boolean): Promise<void> => {
+			await this.plugin.saveSettings();
+			this.plugin.refresh(rerender);
 		};
-	}
 
-	private sliderRow(name: string, key: SliderKey, min: number, max: number, step: number): SettingRow {
-		const settings = this.plugin.settings;
-		return {
-			name,
-			build: (setting) =>
-				setting.addSlider((s) =>
+		const group = (name: string, desc?: string): HTMLElement => {
+			const heading = new Setting(containerEl).setName(name).setHeading();
+			if (desc) heading.setDesc(desc);
+			heading.settingEl.addClass("ytg-settings-section");
+			return containerEl.createDiv({ cls: "ytg-settings-card" });
+		};
+		const divider = (card: HTMLElement): void => {
+			card.createEl("hr", { cls: "ytg-settings-divider" });
+		};
+		const slider = (
+			card: HTMLElement,
+			name: string,
+			desc: string,
+			key: "marginTop" | "marginBottom" | "titleSize" | "avatarSize" | "gapHorizontal" | "gapVertical" | "playerWidth",
+			min: number,
+			max: number,
+			step: number,
+		): void => {
+			new Setting(card)
+				.setName(name)
+				.setDesc(desc)
+				.addSlider((s) =>
 					s
 						.setLimits(min, max, step)
 						.setValue(settings[key])
 						.onChange(async (value) => {
 							settings[key] = value;
-							await this.commit(false);
+							await commit(false);
 						}),
-				),
+				);
 		};
-	}
 
-	private perRowRow(name: string, key: "columns" | "channelColumns"): SettingRow {
-		const settings = this.plugin.settings;
-		return {
-			name,
-			build: (setting) =>
-				setting.addDropdown((dropdown) => {
+		const main = group("Advanced YouTube Features");
+
+		new Setting(main)
+			.setName("Turn video links into thumbnail galleries")
+			.addToggle((toggle) =>
+				toggle.setValue(settings.videoLinks).onChange(async (value) => {
+					settings.videoLinks = value;
+					await commit(true);
+				}),
+			);
+		divider(main);
+		new Setting(main)
+			.setName("Turn channel links into profile cards")
+			.addToggle((toggle) =>
+				toggle.setValue(settings.channelLinks).onChange(async (value) => {
+					settings.channelLinks = value;
+					await commit(true);
+				}),
+			);
+		divider(main);
+		new Setting(main)
+			.setName("Turn playlist links into a video thumbnail gallery")
+			.addToggle((toggle) =>
+				toggle.setValue(settings.playlistLinks).onChange(async (value) => {
+					settings.playlistLinks = value;
+					await commit(true);
+				}),
+			);
+		divider(main);
+		new Setting(main)
+			.setName("Play videos in a floating window inside Obsidian")
+			.addToggle((toggle) =>
+				toggle.setValue(settings.playInObsidian).onChange(async (value) => {
+					settings.playInObsidian = value;
+					await commit(false);
+				}),
+			);
+
+		divider(main);
+		new Setting(main)
+			.setName("Open YouTube channels as a dedicated page inside Obsidian")
+			.addToggle((toggle) =>
+				toggle.setValue(settings.channelPage).onChange(async (value) => {
+					settings.channelPage = value;
+					await commit(false);
+				}),
+			);
+
+		const appearance = group("Appearance");
+
+		new Setting(appearance)
+			.setName("Card background")
+			.addDropdown((dropdown) =>
+				dropdown
+					.addOption("transparent", "Transparent")
+					.addOption("padded", "Padded")
+					.addOption("edge", "Edge to edge")
+					.setValue(settings.cardBackground)
+					.onChange(async (value) => {
+						settings.cardBackground = value as CardBackground;
+						await commit(false);
+					}),
+			);
+		divider(appearance);
+		new Setting(appearance)
+			.setName("Video layout")
+			.addDropdown((dropdown) =>
+				dropdown
+					.addOption("vertical", "Vertical")
+					.addOption("horizontal", "Horizontal")
+					.setValue(settings.videoLayout)
+					.onChange(async (value) => {
+						settings.videoLayout = value as VideoLayout;
+						await commit(false);
+					}),
+			);
+		divider(appearance);
+		new Setting(appearance)
+			.setName("Channel card layout")
+			.addDropdown((dropdown) =>
+				dropdown
+					.addOption("horizontal", "Horizontal")
+					.addOption("vertical", "Vertical")
+					.setValue(settings.channelLayout)
+					.onChange(async (value) => {
+						settings.channelLayout = value as ChannelLayout;
+						await commit(false);
+					}),
+			);
+		divider(appearance);
+
+		const perRow = (name: string, desc: string, key: "columns" | "channelColumns"): void => {
+			new Setting(appearance)
+				.setName(name)
+				.setDesc(desc)
+				.addDropdown((dropdown) => {
 					dropdown.addOption("1", "1").addOption("2", "2").addOption("3", "3");
 					if (!Platform.isMobile) dropdown.addOption("4", "4");
 					dropdown.setValue(String(Math.min(settings[key], Platform.isMobile ? 3 : 4))).onChange(async (value) => {
 						settings[key] = Number(value);
-						await this.commit(false);
+						await commit(false);
 					});
+				});
+		};
+		perRow("Video thumbnails per row", "", "columns");
+		divider(appearance);
+		perRow("Channels cards per row", "", "channelColumns");
+		divider(appearance);
+		slider(
+			appearance,
+			"Margin above each video gallery",
+			"",
+			"marginTop",
+			0,
+			64,
+			2,
+		);
+		divider(appearance);
+		slider(
+			appearance,
+			"Margin below each video gallery",
+			"",
+			"marginBottom",
+			0,
+			64,
+			2,
+		);
+		divider(appearance);
+		slider(
+			appearance,
+			"Horizontal gap between videos",
+			"",
+			"gapHorizontal",
+			0,
+			48,
+			2,
+		);
+		divider(appearance);
+		slider(
+			appearance,
+			"Vertical gap between videos",
+			"",
+			"gapVertical",
+			0,
+			64,
+			2,
+		);
+		divider(appearance);
+		slider(
+			appearance,
+			"Title text size",
+			"",
+			"titleSize",
+			10,
+			22,
+			1,
+		);
+		divider(appearance);
+		slider(
+			appearance,
+			"Floating video player size",
+			"",
+			"playerWidth",
+			320,
+			1280,
+			40,
+		);
+		divider(appearance);
+		new Setting(appearance)
+			.setName("Highlight on hover")
+			.addToggle((toggle) =>
+				toggle.setValue(settings.hoverCard).onChange(async (value) => {
+					settings.hoverCard = value;
+					await commit(false);
 				}),
-		};
-	}
-
-	private linkButtonRow(name: string, desc: string, text: string, url: string): SettingRow {
-		return {
-			name,
-			desc,
-			build: (setting) =>
-				setting.addButton((button) => {
-					button.setButtonText(text).onClick(() => {
-						window.open(url, "_blank");
-					});
-					setIcon(button.buttonEl.createSpan({ cls: "ytg-link-icon" }), "arrow-up-right");
+			);
+		divider(appearance);
+		new Setting(appearance)
+			.setName("Zoom thumbnail on hover")
+			.addToggle((toggle) =>
+				toggle.setValue(settings.hoverZoom).onChange(async (value) => {
+					settings.hoverZoom = value;
+					await commit(false);
 				}),
-		};
-	}
-
-	private toolRow(name: string, text: string, icon: string, run: () => Promise<void>, keepDisabledWhileRunning: boolean): SettingRow {
-		return {
-			name,
-			build: (setting) =>
-				setting.addButton((button) => {
-					button.setButtonText(text).onClick(async () => {
-						if (keepDisabledWhileRunning) button.setDisabled(true);
-						try {
-							await run();
-						} finally {
-							if (keepDisabledWhileRunning) button.setDisabled(false);
-						}
-					});
-					setIcon(button.buttonEl.createSpan({ cls: "ytg-link-icon" }), icon);
-				}),
-		};
-	}
-
-	private buildGroups(): SettingGroup[] {
-		const settings = this.plugin.settings;
-		const email = "contact@kgniewek.com";
-
-		const main: SettingGroup = {
-			heading: "Advanced YouTube Features",
-			rows: [
-				this.toggleRow("Turn video links into thumbnail galleries", "videoLinks", true),
-				this.toggleRow("Turn channel links into profile cards", "channelLinks", true),
-				this.toggleRow("Turn playlist links into a video thumbnail gallery", "playlistLinks", true),
-				this.toggleRow("Play videos in a floating window inside Obsidian", "playInObsidian", false),
-				this.toggleRow("Open YouTube channels as a dedicated page inside Obsidian", "channelPage", false),
-			],
-		};
-
-		const appearance: SettingGroup = {
-			heading: "Appearance",
-			rows: [
-				{
-					name: "Card background",
-					build: (setting) =>
-						setting.addDropdown((dropdown) =>
-							dropdown
-								.addOption("transparent", "Transparent")
-								.addOption("padded", "Padded")
-								.addOption("edge", "Edge to edge")
-								.setValue(settings.cardBackground)
-								.onChange(async (value) => {
-									settings.cardBackground = value as CardBackground;
-									await this.commit(false);
-								}),
-						),
-				},
-				{
-					name: "Video layout",
-					build: (setting) =>
-						setting.addDropdown((dropdown) =>
-							dropdown
-								.addOption("vertical", "Vertical")
-								.addOption("horizontal", "Horizontal")
-								.setValue(settings.videoLayout)
-								.onChange(async (value) => {
-									settings.videoLayout = value as VideoLayout;
-									await this.commit(false);
-								}),
-						),
-				},
-				{
-					name: "Channel card layout",
-					build: (setting) =>
-						setting.addDropdown((dropdown) =>
-							dropdown
-								.addOption("horizontal", "Horizontal")
-								.addOption("vertical", "Vertical")
-								.setValue(settings.channelLayout)
-								.onChange(async (value) => {
-									settings.channelLayout = value as ChannelLayout;
-									await this.commit(false);
-								}),
-						),
-				},
-				this.perRowRow("Video thumbnails per row", "columns"),
-				this.perRowRow("Channels cards per row", "channelColumns"),
-				this.sliderRow("Margin above each video gallery", "marginTop", 0, 64, 2),
-				this.sliderRow("Margin below each video gallery", "marginBottom", 0, 64, 2),
-				this.sliderRow("Horizontal gap between videos", "gapHorizontal", 0, 48, 2),
-				this.sliderRow("Vertical gap between videos", "gapVertical", 0, 64, 2),
-				this.sliderRow("Title text size", "titleSize", 10, 22, 1),
-				this.sliderRow("Floating video player size", "playerWidth", 320, 1280, 40),
-				this.toggleRow("Highlight on hover", "hoverCard", false),
-				this.toggleRow("Zoom thumbnail on hover", "hoverZoom", false),
-			],
-		};
+			);
 
 		if (!Platform.isMobile) {
-			appearance.rows.push({
-				name: "Increase note width globally",
-				build: (setting) => {
-					const showWidthControls = (visible: boolean): void => {
-						setting.controlEl.toggleClass("ytg-width-off", !visible);
-					};
-					setting
-						.addSlider((slider) =>
-							slider
-								.setLimits(700, 2000, 50)
-								.setValue(settings.noteWidth)
-								.onChange(async (value) => {
-									settings.noteWidth = value;
-									await this.commit(false);
-								}),
-						)
-						.addToggle((toggle) =>
-							toggle.setValue(settings.customNoteWidth).onChange(async (value) => {
-								settings.customNoteWidth = value;
-								showWidthControls(value);
-								await this.commit(false);
-							}),
-						);
-					showWidthControls(settings.customNoteWidth);
-				},
-			});
+			divider(appearance);
+			const widthSetting = new Setting(appearance)
+				.setName("Increase note width globally");
+			const showWidthControls = (visible: boolean): void => {
+				widthSetting.controlEl.toggleClass("ytg-width-off", !visible);
+			};
+			widthSetting
+				.addSlider((slider) =>
+					slider
+						.setLimits(700, 2000, 50)
+						.setValue(settings.noteWidth)
+						.onChange(async (value) => {
+							settings.noteWidth = value;
+							await commit(false);
+						}),
+				)
+				.addToggle((toggle) =>
+					toggle.setValue(settings.customNoteWidth).onChange(async (value) => {
+						settings.customNoteWidth = value;
+						showWidthControls(value);
+						await commit(false);
+					}),
+				);
+			showWidthControls(settings.customNoteWidth);
 		}
 
-		const info: SettingGroup = {
-			heading: "Information",
-			rows: [
-				{
-					name: "Preferred video title",
-					build: (setting) =>
-						setting.addDropdown((dropdown) =>
-							dropdown
-								.addOption("markdown", "Markdown link title")
-								.addOption("youtube", "Original YouTube title")
-								.setValue(settings.titleSource)
-								.onChange(async (value) => {
-									settings.titleSource = value as TitleSource;
-									await this.commit(true);
-								}),
-						),
-				},
-				{
-					name: "Cut off long video titles after",
-					build: (setting) =>
-						setting.addDropdown((dropdown) =>
-							dropdown
-								.addOption("1", "One line")
-								.addOption("2", "Two lines")
-								.addOption("0", "Show full title")
-								.setValue(String(settings.titleLines))
-								.onChange(async (value) => {
-									settings.titleLines = Number(value);
-									await this.commit(false);
-								}),
-						),
-				},
-				{
-					name: "Show channel name",
-					build: (setting) =>
-						setting.addToggle((toggle) =>
-							toggle.setValue(settings.showChannel).onChange(async (value) => {
-								settings.showChannel = value;
-								await this.commit(true);
-								this.rerenderTab();
-							}),
-						),
-				},
-				{
-					name: "Show channel picture",
-					build: (setting) => {
-						const showPictureControls = (visible: boolean): void => {
-							setting.controlEl.toggleClass("ytg-width-off", !visible);
-						};
-						setting
-							.addSlider((s) =>
-								s
-									.setLimits(10, 48, 1)
-									.setValue(settings.avatarSize)
-									.onChange(async (value) => {
-										settings.avatarSize = value;
-										await this.commit(false);
-									}),
-							)
-							.addToggle((toggle) =>
-								toggle
-									.setValue(settings.showChannel && settings.showChannelPicture)
-									.setDisabled(!settings.showChannel)
-									.onChange(async (value) => {
-										settings.showChannelPicture = value;
-										showPictureControls(value);
-										await this.commit(true);
-									}),
-							);
-						showPictureControls(settings.showChannel && settings.showChannelPicture);
-					},
-				},
-				this.toggleRow("Show channel's subscriber count", "showSubscribers", true),
-				this.toggleRow("Show channel's video count", "showVideoCount", true),
-				this.toggleRow("Preload thumbnails before they come into view to prevent pop-in", "preloadImages", true),
-			],
+
+		const info = group("Information");
+
+		new Setting(info)
+			.setName("Preferred video title")
+			.addDropdown((dropdown) =>
+				dropdown
+					.addOption("markdown", "Markdown link title")
+					.addOption("youtube", "Original YouTube title")
+					.setValue(settings.titleSource)
+					.onChange(async (value) => {
+						settings.titleSource = value as TitleSource;
+						await commit(true);
+					}),
+			);
+		divider(info);
+		new Setting(info)
+			.setName("Cut off long video titles after")
+			.addDropdown((dropdown) =>
+				dropdown
+					.addOption("1", "One line")
+					.addOption("2", "Two lines")
+					.addOption("0", "Show full title")
+					.setValue(String(settings.titleLines))
+					.onChange(async (value) => {
+						settings.titleLines = Number(value);
+						await commit(false);
+					}),
+			);
+		divider(info);
+		new Setting(info)
+			.setName("Show channel name")
+			.addToggle((toggle) =>
+				toggle.setValue(settings.showChannel).onChange(async (value) => {
+					settings.showChannel = value;
+					await commit(true);
+					this.display();
+				}),
+			);
+		divider(info);
+		const pictureSetting = new Setting(info)
+			.setName("Show channel picture");
+		const showPictureControls = (visible: boolean): void => {
+			pictureSetting.controlEl.toggleClass("ytg-width-off", !visible);
 		};
+		pictureSetting
+			.addSlider((s) =>
+				s
+					.setLimits(10, 48, 1)
+					.setValue(settings.avatarSize)
+					.onChange(async (value) => {
+						settings.avatarSize = value;
+						await commit(false);
+					}),
+			)
+			.addToggle((toggle) =>
+				toggle.setValue(settings.showChannel && settings.showChannelPicture).setDisabled(!settings.showChannel).onChange(async (value) => {
+					settings.showChannelPicture = value;
+					showPictureControls(value);
+					await commit(true);
+				}),
+			);
+		showPictureControls(settings.showChannel && settings.showChannelPicture);
+		divider(info);
+		new Setting(info)
+			.setName("Show channel's subscriber count")
+			.addToggle((toggle) =>
+				toggle.setValue(settings.showSubscribers).onChange(async (value) => {
+					settings.showSubscribers = value;
+					await commit(true);
+				}),
+			);
+		divider(info);
+		new Setting(info)
+			.setName("Show channel's video count")
+			.addToggle((toggle) =>
+				toggle.setValue(settings.showVideoCount).onChange(async (value) => {
+					settings.showVideoCount = value;
+					await commit(true);
+				}),
+			);
+		divider(info);
+		new Setting(info)
+			.setName("Preload thumbnails before they come into view to prevent pop-in")
+			.addToggle((toggle) =>
+				toggle.setValue(settings.preloadImages).onChange(async (value) => {
+					settings.preloadImages = value;
+					await commit(true);
+				}),
+			);
 
-		const api: SettingGroup = {
-			heading: "Information (API key required)",
-			rows: [
-				this.toggleRow("Show view count", "showViews", true),
-				this.toggleRow("Show video duration", "showDuration", true),
-				this.toggleRow("Show publish date", "showPublished", true),
-				this.toggleRow("Show video count and total duration", "showTotalDuration", true),
-				this.toggleRow("Sort channel's videos by popular or oldest", "channelSorting", true),
-				this.linkButtonRow(
-					"Enable YouTube Data API",
-					"Allows to fetch additional data. Logging in is required.",
-					"YouTube Data API",
-					"https://console.cloud.google.com/apis/library/youtube.googleapis.com",
-				),
-				this.linkButtonRow(
-					"Create an API key",
-					"Create credentials, choose API key, then copy the key.",
-					"API credentials",
-					"https://console.cloud.google.com/apis/credentials",
-				),
-				{
-					name: "YouTube Data API key",
-					desc: "The key is stored unencrypted in this plugin's data file.",
-					build: (setting) =>
-						setting.addText((text) => {
-							text.inputEl.type = "password";
-							text
-								.setPlaceholder("API key")
-								.setValue(settings.apiKey)
-								.onChange(async (value) => {
-									settings.apiKey = value.trim();
-									this.plugin.resetApiState();
-									await this.commit(true);
-								});
-						}),
-				},
-				{
-					name: "Test API key",
-					build: (setting) =>
-						setting.addButton((button) =>
-							button.setButtonText("Test key").onClick(async () => {
-								await this.plugin.testApiKey();
-							}),
-						),
-				},
-			],
-		};
+		const api = group("Information (API key required)");
 
-		const tools: SettingGroup = {
-			heading: "Tools",
-			rows: [
-				this.toggleRow("Automatically add titles to pasted YouTube links", "titleOnPaste", false),
-				this.toolRow("Add missing titles to YouTube links", "Scan notes", "pencil", () => this.plugin.offerBareLinkConversion(), true),
-				this.toolRow("Shorten video links into youtu.be/ID", "Scan notes", "scissors", () => this.plugin.offerLinkShortening(), true),
-				this.toolRow(
-					"Clear cached information",
-					"Clear cache",
-					"trash-2",
-					async () => {
-						await this.plugin.clearCache();
-						new Notice("Cache cleared.");
-					},
-					false,
-				),
-			],
-		};
-
-		const support: SettingGroup = {
-			heading: "Support",
-			rows: [
-				{
-					name: "Contact",
-					desc: "Found a bug or have a suggestion? Get in touch.",
-					build: (setting) =>
-						setting.addButton((button) => {
-							button.setButtonText(email).onClick(async () => {
-								try {
-									await navigator.clipboard.writeText(email);
-									new Notice(`${email} copied`);
-								} catch {
-									new Notice(`Could not copy. Email: ${email}`);
-								}
-							});
-							setIcon(button.buttonEl.createSpan({ cls: "ytg-link-icon" }), "copy");
-						}),
-				},
-				this.linkButtonRow(
-					"Buy me a coffee",
-					"If you enjoy this plugin, you can support its development.",
-					"Buy me a coffee",
-					"https://buymeacoffee.com/kgniewek",
-				),
-				{
-					name: "Advanced Web Link Features",
-					desc: "Turn links into detailed cards with previews and open sites in a floating browser.",
-					build: (setting) =>
-						setting.addButton((button) => {
-							button.setButtonText("View plugin").onClick(() => {
-								window.open("obsidian://show-plugin?id=advanced-web-link-features");
-							});
-							setIcon(button.buttonEl.createSpan({ cls: "ytg-link-icon" }), "puzzle");
-						}),
-				},
-			],
-		};
-
-		return [main, appearance, info, api, tools, support];
-	}
-
-	getSettingDefinitions(): SettingDefinitionItem[] {
-		return this.buildGroups().map((group) => ({
-			type: "group" as const,
-			heading: group.heading,
-			items: group.rows.map((row) => ({
-				name: row.name,
-				desc: row.desc,
-				render: (setting: Setting) => {
-					row.build(setting);
-				},
-			})),
-		}));
-	}
-
-	display(): void {
-		this.renderLegacy();
-	}
-
-	private renderLegacy(): void {
-		const { containerEl } = this;
-		containerEl.empty();
-
-		for (const group of this.buildGroups()) {
-			new Setting(containerEl).setName(group.heading).setHeading().settingEl.addClass("ytg-settings-section");
-			const card = containerEl.createDiv({ cls: "ytg-settings-card" });
-			group.rows.forEach((row, index) => {
-				if (index > 0) card.createEl("hr", { cls: "ytg-settings-divider" });
-				const setting = new Setting(card).setName(row.name);
-				if (row.desc) setting.setDesc(row.desc);
-				row.build(setting);
+		new Setting(api)
+			.setName("Show view count")
+			.addToggle((toggle) =>
+				toggle.setValue(settings.showViews).onChange(async (value) => {
+					settings.showViews = value;
+					await commit(true);
+				}),
+			);
+		divider(api);
+		new Setting(api)
+			.setName("Show video duration")
+			.addToggle((toggle) =>
+				toggle.setValue(settings.showDuration).onChange(async (value) => {
+					settings.showDuration = value;
+					await commit(true);
+				}),
+			);
+		divider(api);
+		new Setting(api)
+			.setName("Show publish date")
+			.addToggle((toggle) =>
+				toggle.setValue(settings.showPublished).onChange(async (value) => {
+					settings.showPublished = value;
+					await commit(true);
+				}),
+			);
+		divider(api);
+		new Setting(api)
+			.setName("Show video count and total duration")
+			.addToggle((toggle) =>
+				toggle.setValue(settings.showTotalDuration).onChange(async (value) => {
+					settings.showTotalDuration = value;
+					await commit(true);
+				}),
+			);
+		divider(api);
+		new Setting(api)
+			.setName("Sort channel's videos by popular or oldest")
+			.addToggle((toggle) =>
+				toggle.setValue(settings.channelSorting).onChange(async (value) => {
+					settings.channelSorting = value;
+					await commit(true);
+				}),
+			);
+		divider(api);
+		const linkButton = (setting: Setting, text: string, url: string): void => {
+			setting.addButton((button) => {
+				button.setButtonText(text).onClick(() => {
+					window.open(url, "_blank");
+				});
+				setIcon(button.buttonEl.createSpan({ cls: "ytg-link-icon" }), "arrow-up-right");
 			});
-		}
+		};
+
+		const enableApi = new Setting(api)
+			.setName("Enable YouTube Data API")
+			.setDesc("Allows to fetch additional data. Logging in is required.");
+		linkButton(enableApi, "YouTube Data API", "https://console.cloud.google.com/apis/library/youtube.googleapis.com");
+		divider(api);
+		const createKey = new Setting(api)
+			.setName("Create an API key")
+			.setDesc("Create credentials, choose API key, then copy the key.");
+		linkButton(createKey, "API credentials", "https://console.cloud.google.com/apis/credentials");
+		divider(api);
+		new Setting(api)
+			.setName("YouTube Data API key")
+			.setDesc("The key is stored unencrypted in this plugin's data file.")
+			.addText((text) => {
+				text.inputEl.type = "password";
+				text
+					.setPlaceholder("API key")
+					.setValue(settings.apiKey)
+					.onChange(async (value) => {
+						settings.apiKey = value.trim();
+						this.plugin.resetApiState();
+						await commit(true);
+					});
+			});
+		divider(api);
+		new Setting(api)
+			.setName("Test API key")
+			.addButton((button) =>
+				button.setButtonText("Test key").onClick(async () => {
+					await this.plugin.testApiKey();
+				}),
+			);
+
+		const tools = group("Tools");
+		new Setting(tools)
+			.setName("Automatically add titles to pasted YouTube links")
+			.addToggle((toggle) =>
+				toggle.setValue(settings.titleOnPaste).onChange(async (value) => {
+					settings.titleOnPaste = value;
+					await commit(false);
+				}),
+			);
+		divider(tools);
+		let titlesButton: ButtonComponent | null = null;
+		let shortenButton: ButtonComponent | null = null;
+		let clearButton: ButtonComponent | null = null;
+		const toolIcon = (button: ButtonComponent | null, icon: string): void => {
+			if (button) setIcon(button.buttonEl.createSpan({ cls: "ytg-link-icon" }), icon);
+		};
+		new Setting(tools)
+			.setName("Add missing titles to YouTube links")
+			.addButton((button) =>
+				(titlesButton = button).setButtonText("Scan notes").onClick(async () => {
+					button.setDisabled(true);
+					try {
+						await this.plugin.offerBareLinkConversion();
+					} finally {
+						button.setDisabled(false);
+					}
+				}),
+			);
+		toolIcon(titlesButton, "pencil");
+
+		divider(tools);
+		new Setting(tools)
+			.setName("Shorten video links into youtu.be/ID")
+			.addButton((button) =>
+				(shortenButton = button).setButtonText("Scan notes").onClick(async () => {
+					button.setDisabled(true);
+					try {
+						await this.plugin.offerLinkShortening();
+					} finally {
+						button.setDisabled(false);
+					}
+				}),
+			);
+		toolIcon(shortenButton, "scissors");
+		divider(tools);
+		new Setting(tools)
+			.setName("Clear cached information")
+			.addButton((button) =>
+				(clearButton = button).setButtonText("Clear cache").onClick(async () => {
+					await this.plugin.clearCache();
+					new Notice("Cache cleared.");
+				}),
+			);
+		toolIcon(clearButton, "trash-2");
+
+		const support = group("Support");
+
+		const email = "contact@kgniewek.com";
+		new Setting(support)
+			.setName("Contact")
+			.setDesc("Found a bug or have a suggestion? Get in touch.")
+			.addButton((button) => {
+				button.setButtonText(email).onClick(async () => {
+					try {
+						await navigator.clipboard.writeText(email);
+						new Notice(`${email} copied`);
+					} catch {
+						new Notice(`Could not copy. Email: ${email}`);
+					}
+				});
+				setIcon(button.buttonEl.createSpan({ cls: "ytg-link-icon" }), "copy");
+			});
+		divider(support);
+
+		const coffee = new Setting(support)
+			.setName("Buy me a coffee")
+			.setDesc("If you enjoy this plugin, you can support its development.");
+		linkButton(coffee, "Buy me a coffee", "https://buymeacoffee.com/kgniewek");
+
+		divider(support);
+
+		new Setting(support)
+			.setName("Advanced Web Link Features")
+			.setDesc("Turn links into detailed cards with previews and open sites in a floating browser.")
+			.addButton((button) => {
+				button.setButtonText("View plugin").onClick(() => {
+					window.open("obsidian://show-plugin?id=advanced-web-link-features");
+				});
+				setIcon(button.buttonEl.createSpan({ cls: "ytg-link-icon" }), "puzzle");
+			});
 	}
 }
