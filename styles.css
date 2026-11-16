@@ -804,8 +804,7 @@ body .ytg-channel-page .ytg-cp-info .ytg-channel-stats.ytg-stats-icons {
 }
 
 .ytg-menu .menu-separator {
-	margin-top: var(--size-4-2);
-	margin-bottom: var(--size-4-2);
+	margin: var(--size-4-2) calc(var(--size-4-2) * -1);
 }
 
 .menu-item-icon .ytg-menu-avatar {

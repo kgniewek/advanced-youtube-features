@@ -1755,7 +1755,7 @@ export default class YouTubeGalleryPlugin extends Plugin {
 		img.show();
 	}
 
-	renderVideo(parent: HTMLElement, item: LinkItem, id: string, preset?: { channel?: string }, queue?: VideoQueue, sourcePath = ""): void {
+	renderVideo(parent: HTMLElement, item: LinkItem, id: string, preset?: { channel?: string }, queue?: VideoQueue, sourcePath = "", removeOverride?: () => void): void {
 		const { titleSource, showChannel, showChannelPicture, showViews, showDuration, showPublished } = this.settings;
 
 		const link = parent.createEl("a", {
@@ -1792,13 +1792,13 @@ export default class YouTubeGalleryPlugin extends Plugin {
 		const durationEl = showDuration ? thumb.createDiv({ cls: "ytg-badge ytg-duration" }) : null;
 		const textWrap = link.createDiv({ cls: "ytg-video-text" });
 		const titleEl = textWrap.createDiv({ cls: "ytg-title", text: item.label || FALLBACK_TITLE });
-		const remove = sourcePath
+		const remove = removeOverride ?? (sourcePath
 			? (): void =>
 					this.removeLinkFromNote(sourcePath, item.href, link, () => {
 						const at = queue && entry ? queue.items.indexOf(entry) : -1;
 						if (queue && at >= 0) queue.items.splice(at, 1);
 					})
-			: undefined;
+			: undefined);
 		this.attachMenu(link, item.href, id, () => titleEl.textContent ?? "", play, undefined, remove);
 
 		const wantViews = showViews && this.hasApiKey();
@@ -1862,6 +1862,8 @@ export default class YouTubeGalleryPlugin extends Plugin {
 		const meta = header.createDiv({ cls: "ytg-playlist-meta" });
 		const descEl = header.createDiv({ cls: "ytg-playlist-desc" });
 		const body = block.createDiv();
+		// Videos inside a playlist are not links in the note; removing one removes the playlist link.
+		const removePlaylist = sourcePath ? () => this.removeLinkFromNote(sourcePath, item.href, block) : undefined;
 
 		void this.getPlaylistInfo(id).then((info) => {
 			if (!info) return;
@@ -1901,7 +1903,7 @@ export default class YouTubeGalleryPlugin extends Plugin {
 			const addVideos = (videos: PlaylistVideo[]): void => {
 				for (const video of videos) {
 					const link: LinkItem = { href: `https://youtu.be/${video.id}`, label: video.title, videoId: video.id };
-					this.renderVideo(gallery, link, video.id, { channel: video.channel }, queue);
+					this.renderVideo(gallery, link, video.id, { channel: video.channel }, queue, "", removePlaylist);
 				}
 				shown += videos.length;
 			};
