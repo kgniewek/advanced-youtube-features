@@ -3114,5 +3114,17 @@ class YouTubeGallerySettingTab extends PluginSettingTab {
 			.setName("Buy me a coffee")
 			.setDesc("If you enjoy this plugin, you can support its development.");
 		linkButton(coffee, "Buy me a coffee", "https://buymeacoffee.com/kgniewek");
+
+		divider(support);
+
+		new Setting(support)
+			.setName("Advanced Web Link Features")
+			.setDesc("Turn links into detailed cards with previews and open sites in a floating browser.")
+			.addButton((button) => {
+				button.setButtonText("View plugin").onClick(() => {
+					window.open("obsidian://show-plugin?id=advanced-web-link-features");
+				});
+				setIcon(button.buttonEl.createSpan({ cls: "ytg-link-icon" }), "puzzle");
+			});
 	}
 }
