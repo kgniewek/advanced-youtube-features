@@ -187,7 +187,25 @@ const CHANNEL_SUBPAGES = new Set([
 	"releases",
 ]);
 const FALLBACK_TITLE = "YouTube video";
-const BLANK_TEXT = /^[\s​-‏ ⁠﻿]*$/;
+
+/** Safe lookup in untyped JSON: returns undefined as soon as the path leaves an object. */
+function pick(value: unknown, ...path: (string | number)[]): unknown {
+	let node: unknown = value;
+	for (const step of path) {
+		if (node === null || typeof node !== "object") return undefined;
+		node = (node as Record<string, unknown>)[String(step)];
+	}
+	return node;
+}
+
+function str(value: unknown, fallback = ""): string {
+	return typeof value === "string" || typeof value === "number" || typeof value === "boolean" ? String(value) : fallback;
+}
+
+function list(value: unknown): unknown[] {
+	return Array.isArray(value) ? (value as unknown[]) : [];
+}
+const BLANK_TEXT = /^[\s\u200B-\u200F\u00A0\u2060\uFEFF]*$/;
 
 function safeUrl(href: string): URL | null {
 	try {
@@ -392,11 +410,11 @@ function continuationToken(root: unknown): string | undefined {
 
 function parsePlaylistApiItems(items: unknown): PlaylistVideo[] {
 	const videos: PlaylistVideo[] = [];
-	for (const entry of Array.isArray(items) ? items : []) {
-		const id = String(entry?.snippet?.resourceId?.videoId ?? "");
-		const title = String(entry?.snippet?.title ?? "");
+	for (const entry of list(items)) {
+		const id = str(pick(entry, "snippet", "resourceId", "videoId"));
+		const title = str(pick(entry, "snippet", "title"));
 		if (!VIDEO_ID.test(id) || /^(Private|Deleted) video$/.test(title)) continue;
-		videos.push({ id, title, channel: entry?.snippet?.videoOwnerChannelTitle ? String(entry.snippet.videoOwnerChannelTitle) : undefined });
+		videos.push({ id, title, channel: str(pick(entry, "snippet", "videoOwnerChannelTitle")) || undefined });
 	}
 	return videos;
 }
@@ -821,11 +839,12 @@ class ChannelView extends ItemView {
 			footer.empty();
 			if (feed.done) return;
 			const more = footer.createEl("button", { cls: "ytg-playlist-more", text: "Load more" });
-			more.addEventListener("click", async () => {
+			const loadMore = async (): Promise<void> => {
 				more.disabled = true;
 				await loadBatch();
 				if (run === this.run) syncButton();
-			});
+			};
+			more.addEventListener("click", () => void loadMore());
 		};
 		syncButton();
 	}
@@ -1198,6 +1217,7 @@ export default class YouTubeGalleryPlugin extends Plugin {
 					}),
 				);
 			} catch {
+				// A note that cannot be changed is skipped.
 			}
 		}
 
@@ -1246,6 +1266,7 @@ export default class YouTubeGalleryPlugin extends Plugin {
 			try {
 				await this.app.vault.process(file, (data) => shortenVideoLinks(data, counter));
 			} catch {
+				// A note that cannot be changed is skipped.
 			}
 		}
 		new Notice(`Shortened ${plural(counter.count, "video link")}.`);
@@ -1268,7 +1289,7 @@ export default class YouTubeGalleryPlugin extends Plugin {
 				this.resetApiState();
 				new Notice("YouTube Gallery: the API key works.");
 			} else {
-				const reason = String(res.json?.error?.message ?? `HTTP ${res.status}`);
+				const reason = str(pick(res.json, "error", "message"), `HTTP ${res.status}`);
 				new Notice(`YouTube Gallery: the API key was rejected. ${reason}`, 10000);
 			}
 		} catch {
@@ -1329,7 +1350,7 @@ export default class YouTubeGalleryPlugin extends Plugin {
 		const decoration = ".list-bullet, .list-collapse-indicator, .collapse-indicator";
 		const content = (node: ChildNode): ChildNode[] =>
 			Array.from(node.childNodes).filter(
-				(n) => !this.isBlank(n) && !(n instanceof HTMLElement && n.matches(decoration)),
+				(n) => !this.isBlank(n) && !(n.instanceOf(HTMLElement) && n.matches(decoration)),
 			);
 
 		let nodes = content(li);
@@ -1610,7 +1631,8 @@ export default class YouTubeGalleryPlugin extends Plugin {
 			if (!player || !iframe || evt.source !== iframe.contentWindow) return;
 			let data: { event?: string; info?: unknown } | null = null;
 			try {
-				data = typeof evt.data === "string" ? JSON.parse(evt.data) : evt.data;
+				const raw: unknown = typeof evt.data === "string" ? JSON.parse(evt.data) : evt.data;
+				data = raw as { event?: string; info?: unknown } | null;
 			} catch {
 				return;
 			}
@@ -2013,20 +2035,23 @@ export default class YouTubeGalleryPlugin extends Plugin {
 			if (res.status === 400 || res.status === 403) this.apiBroken = true;
 			if (res.status !== 200) return null;
 
-			const item = res.json?.items?.[0];
-			if (!item && Array.isArray(res.json?.items)) return "unavailable";
-			if (!item?.snippet?.title) return null;
+			const items = pick(res.json, "items");
+			const item = pick(items, 0);
+			if (!item && Array.isArray(items)) return "unavailable";
+			const title = str(pick(item, "snippet", "title"));
+			if (!title) return null;
 
-			const views = Number(item.statistics?.viewCount);
-			const channelId = item.snippet.channelId ? String(item.snippet.channelId) : "";
+			const views = Number(pick(item, "statistics", "viewCount"));
+			const channelId = str(pick(item, "snippet", "channelId"));
+			const iso = str(pick(item, "contentDetails", "duration"));
 			return {
-				title: String(item.snippet.title),
-				channel: String(item.snippet.channelTitle ?? ""),
+				title,
+				channel: str(pick(item, "snippet", "channelTitle")),
 				channelUrl: channelId ? `https://www.youtube.com/channel/${channelId}` : undefined,
 				views: Number.isFinite(views) ? views : undefined,
-				duration: formatDuration(String(item.contentDetails?.duration ?? "")) || undefined,
-				durationSeconds: parseDurationSeconds(String(item.contentDetails?.duration ?? "")) ?? undefined,
-				published: item.snippet.publishedAt ? String(item.snippet.publishedAt) : undefined,
+				duration: formatDuration(iso) || undefined,
+				durationSeconds: parseDurationSeconds(iso) ?? undefined,
+				published: str(pick(item, "snippet", "publishedAt")) || undefined,
 				full: true,
 				v: CACHE_VERSION,
 			};
@@ -2043,11 +2068,12 @@ export default class YouTubeGalleryPlugin extends Plugin {
 				throw: false,
 			});
 			if (res.status === 404) return "unavailable";
-			if (res.status !== 200 || !res.json?.title) return null;
+			const title = str(pick(res.json, "title"));
+			if (res.status !== 200 || !title) return null;
 			return {
-				title: String(res.json.title),
-				channel: String(res.json.author_name ?? ""),
-				channelUrl: res.json.author_url ? String(res.json.author_url) : undefined,
+				title,
+				channel: str(pick(res.json, "author_name")),
+				channelUrl: str(pick(res.json, "author_url")) || undefined,
 				full: false,
 				v: CACHE_VERSION,
 			};
@@ -2086,9 +2112,9 @@ export default class YouTubeGalleryPlugin extends Plugin {
 				throw: false,
 			});
 			if (res.status === 400 || res.status === 403) this.apiBroken = true;
-			const id = res.status === 200 ? res.json?.items?.[0]?.id : null;
-			if (id) this.channelIds.set(ref.key, String(id));
-			return id ? String(id) : null;
+			const id = res.status === 200 ? str(pick(res.json, "items", 0, "id")) : "";
+			if (id) this.channelIds.set(ref.key, id);
+			return id || null;
 		} catch {
 			return null;
 		}
@@ -2113,13 +2139,13 @@ export default class YouTubeGalleryPlugin extends Plugin {
 				const res = await requestUrl({ url, throw: false });
 				if (res.status === 400 || res.status === 403) this.apiBroken = true;
 				if (res.status !== 200) return null;
-				token = res.json?.nextPageToken ? String(res.json.nextPageToken) : undefined;
-				if (sort !== "popular") return parsePlaylistApiItems(res.json?.items);
+				token = str(pick(res.json, "nextPageToken")) || undefined;
+				if (sort !== "popular") return parsePlaylistApiItems(pick(res.json, "items"));
 				const found: PlaylistVideo[] = [];
-				for (const item of Array.isArray(res.json?.items) ? res.json.items : []) {
-					const id = String(item?.id?.videoId ?? "");
+				for (const item of list(pick(res.json, "items"))) {
+					const id = str(pick(item, "id", "videoId"));
 					if (!VIDEO_ID.test(id)) continue;
-					found.push({ id, title: String(item?.snippet?.title ?? ""), channel: item?.snippet?.channelTitle ? String(item.snippet.channelTitle) : undefined });
+					found.push({ id, title: str(pick(item, "snippet", "title")), channel: str(pick(item, "snippet", "channelTitle")) || undefined });
 				}
 				return found;
 			} catch {
@@ -2172,7 +2198,7 @@ export default class YouTubeGalleryPlugin extends Plugin {
 					}),
 					throw: false,
 				});
-				return res.status === 200 ? res.json : null;
+				return res.status === 200 ? (res.json as unknown) : null;
 			} catch {
 				return null;
 			}
@@ -2246,16 +2272,21 @@ export default class YouTubeGalleryPlugin extends Plugin {
 
 	private addGalleryTotal(gallery: HTMLElement, ids: string[]): void {
 		const line = gallery.createDiv({ cls: "ytg-total" });
+		gallery.addClass("ytg-has-total");
+		const drop = (): void => {
+			line.remove();
+			gallery.removeClass("ytg-has-total");
+		};
 		void Promise.all(ids.map((id) => this.getVideoInfo(id))).then((infos) => {
 			let seconds = 0;
 			let count = 0;
 			for (const info of infos) {
 				if (info?.unavailable) continue;
-				if (info?.durationSeconds === undefined) return line.remove();
+				if (info?.durationSeconds === undefined) return drop();
 				seconds += info.durationSeconds;
 				count++;
 			}
-			if (count === 0) return line.remove();
+			if (count === 0) return drop();
 			line.setText(`${plural(count, "video")} · ${formatTotalDuration(seconds)}`);
 		});
 	}
@@ -2283,11 +2314,11 @@ export default class YouTubeGalleryPlugin extends Plugin {
 	private async sumPlaylistDuration(id: string): Promise<number | null> {
 		const base = "https://www.googleapis.com/youtube/v3";
 		const key = encodeURIComponent(this.settings.apiKey.trim());
-		const get = async (url: string): Promise<{ items?: unknown; nextPageToken?: unknown } | null> => {
+		const get = async (url: string): Promise<unknown> => {
 			try {
 				const res = await requestUrl({ url, throw: false });
 				if (res.status === 400 || res.status === 403) this.apiBroken = true;
-				return res.status === 200 ? res.json : null;
+				return res.status === 200 ? (res.json as unknown) : null;
 			} catch {
 				return null;
 			}
@@ -2296,16 +2327,16 @@ export default class YouTubeGalleryPlugin extends Plugin {
 		const ids: string[] = [];
 		let token: string | undefined;
 		for (let page = 0; page < 100; page++) {
-			const list = await get(
+			const page_ = await get(
 				`${base}/playlistItems?part=contentDetails&maxResults=50&playlistId=${encodeURIComponent(id)}&key=${key}` +
 					(token ? `&pageToken=${encodeURIComponent(token)}` : ""),
 			);
-			if (!list) return null;
-			for (const entry of Array.isArray(list.items) ? list.items : []) {
-				const videoId = String(entry?.contentDetails?.videoId ?? "");
+			if (!page_) return null;
+			for (const entry of list(pick(page_, "items"))) {
+				const videoId = str(pick(entry, "contentDetails", "videoId"));
 				if (VIDEO_ID.test(videoId)) ids.push(videoId);
 			}
-			token = list.nextPageToken ? String(list.nextPageToken) : undefined;
+			token = str(pick(page_, "nextPageToken")) || undefined;
 			if (!token) break;
 		}
 
@@ -2313,8 +2344,8 @@ export default class YouTubeGalleryPlugin extends Plugin {
 		for (let i = 0; i < ids.length; i += 50) {
 			const details = await get(`${base}/videos?part=contentDetails&maxResults=50&id=${ids.slice(i, i + 50).join(",")}&key=${key}`);
 			if (!details) return null;
-			for (const entry of Array.isArray(details.items) ? details.items : []) {
-				total += parseDurationSeconds(String(entry?.contentDetails?.duration ?? "")) ?? 0;
+			for (const entry of list(pick(details, "items"))) {
+				total += parseDurationSeconds(str(pick(entry, "contentDetails", "duration"))) ?? 0;
 			}
 		}
 		return total;
@@ -2389,8 +2420,9 @@ export default class YouTubeGalleryPlugin extends Plugin {
 				const res = await requestUrl({ url, throw: false });
 				if (res.status === 400 || res.status === 403) this.apiBroken = true;
 				if (res.status !== 200) return;
-				found = parsePlaylistApiItems(res.json?.items);
-				if (res.json?.nextPageToken) info.next = { source: "api", token: String(res.json.nextPageToken) };
+				found = parsePlaylistApiItems(pick(res.json, "items"));
+				const nextToken = str(pick(res.json, "nextPageToken"));
+				if (nextToken) info.next = { source: "api", token: nextToken };
 			} else {
 				const res = await requestUrl({
 					url: `https://www.youtube.com/youtubei/v1/browse?key=${encodeURIComponent(next.key)}&prettyPrint=false`,
@@ -2404,14 +2436,16 @@ export default class YouTubeGalleryPlugin extends Plugin {
 					throw: false,
 				});
 				if (res.status !== 200) return;
-				found = extractPlaylistVideos(res.json);
-				const token = continuationToken(res.json);
+				const body: unknown = res.json;
+				found = extractPlaylistVideos(body);
+				const token = continuationToken(body);
 				if (token) info.next = { ...next, token };
 			}
 			const known = new Set(info.videos.map((video) => video.id));
 			info.videos.push(...found.filter((video) => !known.has(video.id)));
 			this.persistSoon();
 		} catch {
+			// Leave the playlist as it is; the next "Load more" can try again.
 		}
 	}
 
@@ -2421,11 +2455,12 @@ export default class YouTubeGalleryPlugin extends Plugin {
 				url: `https://www.youtube.com/oembed?format=json&url=${encodeURIComponent(url)}`,
 				throw: false,
 			});
-			if (res.status !== 200 || !res.json?.title) return null;
+			const title = str(pick(res.json, "title"));
+			if (res.status !== 200 || !title) return null;
 			return {
-				title: String(res.json.title),
-				channel: String(res.json.author_name ?? ""),
-				channelUrl: res.json.author_url ? String(res.json.author_url) : undefined,
+				title,
+				channel: str(pick(res.json, "author_name")),
+				channelUrl: str(pick(res.json, "author_url")) || undefined,
 			};
 		} catch {
 			return null;
@@ -2441,8 +2476,8 @@ export default class YouTubeGalleryPlugin extends Plugin {
 				throw: false,
 			});
 			if (meta.status === 400 || meta.status === 403) this.apiBroken = true;
-			const item = meta.status === 200 ? meta.json?.items?.[0] : null;
-			if (!item?.snippet) return null;
+			const item = meta.status === 200 ? pick(meta.json, "items", 0) : null;
+			if (!pick(item, "snippet")) return null;
 
 			const videos: PlaylistVideo[] = [];
 			let token: string | undefined;
@@ -2454,16 +2489,16 @@ export default class YouTubeGalleryPlugin extends Plugin {
 					throw: false,
 				});
 				if (list.status !== 200) break;
-				videos.push(...parsePlaylistApiItems(list.json?.items));
-				token = list.json?.nextPageToken ? String(list.json.nextPageToken) : undefined;
+				videos.push(...parsePlaylistApiItems(pick(list.json, "items")));
+				token = str(pick(list.json, "nextPageToken")) || undefined;
 			} while (token && videos.length < PLAYLIST_PAGE);
 
-			const count = Number(item.contentDetails?.itemCount);
-			const channelId = item.snippet.channelId ? String(item.snippet.channelId) : "";
+			const count = Number(pick(item, "contentDetails", "itemCount"));
+			const channelId = str(pick(item, "snippet", "channelId"));
 			return {
-				title: String(item.snippet.title ?? ""),
-				description: String(item.snippet.description ?? ""),
-				channel: String(item.snippet.channelTitle ?? ""),
+				title: str(pick(item, "snippet", "title")),
+				description: str(pick(item, "snippet", "description")),
+				channel: str(pick(item, "snippet", "channelTitle")),
 				channelUrl: channelId ? `https://www.youtube.com/channel/${channelId}` : undefined,
 				videoCount: Number.isFinite(count) ? count : undefined,
 				videos,
@@ -2535,18 +2570,19 @@ export default class YouTubeGalleryPlugin extends Plugin {
 			if (res.status === 400 || res.status === 403) this.apiBroken = true;
 			if (res.status !== 200) return null;
 
-			const item = res.json?.items?.[0];
-			if (!item?.snippet?.title) return null;
+			const item = pick(res.json, "items", 0);
+			const name = str(pick(item, "snippet", "title"));
+			if (!name) return null;
 
-			const subs = Number(item.statistics?.subscriberCount);
-			const videos = Number(item.statistics?.videoCount);
-			const views = Number(item.statistics?.viewCount);
-			const thumbs = item.snippet.thumbnails ?? {};
+			const subs = Number(pick(item, "statistics", "subscriberCount"));
+			const videos = Number(pick(item, "statistics", "videoCount"));
+			const views = Number(pick(item, "statistics", "viewCount"));
+			const thumbs = pick(item, "snippet", "thumbnails");
 			return {
-				name: String(item.snippet.title),
-				avatar: String(thumbs.high?.url ?? thumbs.medium?.url ?? thumbs.default?.url ?? ""),
+				name,
+				avatar: str(pick(thumbs, "high", "url")) || str(pick(thumbs, "medium", "url")) || str(pick(thumbs, "default", "url")),
 				subscribers:
-					!item.statistics?.hiddenSubscriberCount && Number.isFinite(subs)
+					!pick(item, "statistics", "hiddenSubscriberCount") && Number.isFinite(subs)
 						? formatCount(subs)
 						: undefined,
 				videos: Number.isFinite(videos) ? formatCount(videos) : undefined,
@@ -2633,7 +2669,6 @@ class YouTubeGallerySettingTab extends PluginSettingTab {
 					s
 						.setLimits(min, max, step)
 						.setValue(settings[key])
-						.setDynamicTooltip()
 						.onChange(async (value) => {
 							settings[key] = value;
 							await commit(false);
@@ -2839,7 +2874,6 @@ class YouTubeGallerySettingTab extends PluginSettingTab {
 					slider
 						.setLimits(700, 2000, 50)
 						.setValue(settings.noteWidth)
-						.setDynamicTooltip()
 						.onChange(async (value) => {
 							settings.noteWidth = value;
 							await commit(false);
@@ -2905,7 +2939,6 @@ class YouTubeGallerySettingTab extends PluginSettingTab {
 				s
 					.setLimits(10, 48, 1)
 					.setValue(settings.avatarSize)
-					.setDynamicTooltip()
 					.onChange(async (value) => {
 						settings.avatarSize = value;
 						await commit(false);

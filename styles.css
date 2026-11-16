@@ -81,7 +81,7 @@ body.ytg-filled .ytg-channels .ytg-item:focus-visible {
 	border-color: var(--background-modifier-border-hover);
 }
 
-body.ytg-filled .ytg-gallery:not(:has(> .ytg-total)) {
+body.ytg-filled .ytg-gallery:not(.ytg-has-total) {
 	grid-auto-rows: 1fr;
 }
 
@@ -825,8 +825,8 @@ body .ytg-channel-page .ytg-cp-info .ytg-channel-stats.ytg-stats-icons {
 	display: none;
 }
 
-.ytg-width-off > :not(.checkbox-container) {
-	display: none !important;
+.setting-item .setting-item-control.ytg-width-off > :not(.checkbox-container) {
+	display: none;
 }
 
 .ytg-settings-card .setting-item-control input[type="range"] {
