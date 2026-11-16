@@ -127,4 +127,8 @@ This is an independent project. It is **not affiliated with, endorsed by or spon
 
 #### License
 
-Copyright (c) 2026 Krzysztof Gniewek. All rights reserved. The source is visible for transparency, but copying, modifying or redistributing it is not permitted. See [LICENSE](LICENSE).
+Copyright (c) 2026 Krzysztof Gniewek (kgniewek). Licensed under the [PolyForm Strict License 1.0.0](LICENSE).
+
+You can install and use the plugin for noncommercial purposes. The source is visible for transparency, but copying, redistributing or publishing modified versions, and commercial use, are not permitted.
+
+Contributions are welcome. See [CONTRIBUTING.md](CONTRIBUTING.md).

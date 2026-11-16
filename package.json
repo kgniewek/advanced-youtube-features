@@ -1,6 +1,6 @@
 {
   "name": "advanced-youtube-features",
-  "version": "1.0.8",
+  "version": "1.0.9",
   "description": "Turn YouTube links into thumbnail galleries, channel cards and playlists, and watch videos in a floating player without leaving your notes.",
   "main": "main.js",
   "scripts": {
@@ -8,7 +8,7 @@
     "build": "tsc --noEmit --skipLibCheck && esbuild main.ts --bundle --external:obsidian --external:electron --external:@codemirror/* --external:@lezer/* --format=cjs --target=es2020 --minify --outfile=main.js"
   },
   "keywords": ["obsidian", "obsidian-plugin", "youtube"],
-  "license": "UNLICENSED",
+  "license": "PolyForm-Strict-1.0.0",
   "devDependencies": {
     "@types/node": "^20.0.0",
     "esbuild": "^0.25.0",
