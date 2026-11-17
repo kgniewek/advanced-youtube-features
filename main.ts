@@ -3166,12 +3166,12 @@ class YouTubeGallerySettingTab extends PluginSettingTab {
 
 		new Setting(support)
 			.setName("Advanced Daily Tracker")
-            .setDesc("Log your activity flexibly & monitor the progress on graphs and heatmaps.")
+			.setDesc("Log your activity flexibly & monitor your progress in graphs and heatmaps.")
 			.addButton((button) => {
 				button.setButtonText("View plugin").onClick(() => {
 					window.open("obsidian://show-plugin?id=advanced-daily-tracker");
 				});
-				setIcon(button.buttonEl.createSpan({ cls: "adt-link-icon" }), "puzzle");
+				setIcon(button.buttonEl.createSpan({ cls: "ytg-link-icon" }), "puzzle");
 			});
 	}
 }
