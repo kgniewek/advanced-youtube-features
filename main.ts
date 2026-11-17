@@ -3154,12 +3154,24 @@ class YouTubeGallerySettingTab extends PluginSettingTab {
 
 		new Setting(support)
 			.setName("Advanced Web Link Features")
-			.setDesc("Turn links into detailed cards with previews and open sites in a floating browser.")
+			.setDesc("Turn links into detailed cards with previews & open sites in a floating browser.")
 			.addButton((button) => {
 				button.setButtonText("View plugin").onClick(() => {
 					window.open("obsidian://show-plugin?id=advanced-web-link-features");
 				});
 				setIcon(button.buttonEl.createSpan({ cls: "ytg-link-icon" }), "puzzle");
+			});
+
+		divider(support);
+
+		new Setting(support)
+			.setName("Advanced Daily Tracker")
+			.setDesc("Track activity with various inputs & turn them into graphs or heatmaps.")
+			.addButton((button) => {
+				button.setButtonText("View plugin").onClick(() => {
+					window.open("obsidian://show-plugin?id=advanced-daily-tracker");
+				});
+				setIcon(button.buttonEl.createSpan({ cls: "adt-link-icon" }), "puzzle");
 			});
 	}
 }
