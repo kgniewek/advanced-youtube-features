@@ -1,6 +1,6 @@
 {
   "name": "advanced-youtube-features",
-  "version": "1.1.5",
+  "version": "1.1.6",
   "description": "Turn YouTube links into thumbnail galleries, channel cards and playlists, and watch videos in a floating player without leaving your notes.",
   "main": "main.js",
   "scripts": {

@@ -620,6 +620,48 @@ class ConfirmModal extends Modal {
 	}
 }
 
+class PlaylistLinksModal extends Modal {
+	constructor(
+		app: App,
+		private readonly heading: string,
+		private readonly text: string,
+		private readonly count: number,
+	) {
+		super(app);
+	}
+
+	onOpen(): void {
+		const { contentEl } = this;
+		this.setTitle(this.heading);
+		contentEl.createEl("p", { text: plural(this.count, "video") });
+		const area = contentEl.createEl("textarea", {
+			cls: "ytg-links-area",
+			attr: { readonly: "", spellcheck: "false" },
+		});
+		area.value = this.text;
+		new Setting(contentEl)
+			.addButton((button) =>
+				button
+					.setButtonText("Copy all")
+					.setCta()
+					.onClick(async () => {
+						try {
+							await navigator.clipboard.writeText(this.text);
+							new Notice("Links copied.");
+						} catch {
+							area.select();
+							new Notice("Could not copy. The text is selected, press Ctrl/Cmd+C.");
+						}
+					}),
+			)
+			.addButton((button) => button.setButtonText("Close").onClick(() => this.close()));
+	}
+
+	onClose(): void {
+		this.contentEl.empty();
+	}
+}
+
 interface QueueEntry {
 	id: string;
 	href: string;
@@ -1270,6 +1312,43 @@ export default class YouTubeGalleryPlugin extends Plugin {
 			}
 		}
 		new Notice(`Shortened ${plural(counter.count, "video link")}.`);
+	}
+
+	/** Loads every video of a playlist (all pages) and shows them as titled youtu.be links in a popup. */
+	async convertPlaylistToLinks(input: string): Promise<void> {
+		const url = safeUrl(input.trim());
+		const id =
+			url && YOUTUBE_HOSTS.has(url.hostname.toLowerCase())
+				? (parsePlaylistId(url.href) ?? url.searchParams.get("list"))
+				: null;
+		if (!id || !/^[\w-]{10,64}$/.test(id)) {
+			new Notice("Paste a valid YouTube playlist link.");
+			return;
+		}
+
+		const progress = new Notice("Loading playlist…", 0);
+		try {
+			const info = await this.getPlaylistInfo(id);
+			if (!info) {
+				new Notice("Could not load this playlist. Is it public?");
+				return;
+			}
+			for (let guard = 0; info.next && guard < 400; guard++) {
+				const total = info.videoCount ? `/${info.videoCount}` : "";
+				progress.setMessage(`Loading playlist… ${info.videos.length}${total}`);
+				await this.fetchNextPlaylistPage(info, id);
+			}
+			if (info.videos.length === 0) {
+				new Notice("No videos found in this playlist.");
+				return;
+			}
+			const text = info.videos
+				.map((video) => markdownLink(video.title || FALLBACK_TITLE, `https://youtu.be/${video.id}`))
+				.join("\n");
+			new PlaylistLinksModal(this.app, info.title || FALLBACK_PLAYLIST, text, info.videos.length).open();
+		} finally {
+			progress.hide();
+		}
 	}
 
 	async testApiKey(): Promise<void> {
@@ -3079,6 +3158,24 @@ class YouTubeGallerySettingTab extends PluginSettingTab {
 					settings.titleOnPaste = value;
 					await commit(false);
 				}),
+			);
+		divider(tools);
+		let playlistInput = "";
+		new Setting(tools)
+			.setName("Convert playlist into video links")
+			.addText((text) => {
+				text.inputEl.addClass("ytg-playlist-input");
+				text
+					.setPlaceholder("https://www.youtube.com/playlist?list=PL…")
+					.onChange((value) => {
+						playlistInput = value;
+					});
+			})
+			.addButton((button) =>
+				button
+					.setIcon("list-video")
+					.setTooltip("Convert")
+					.onClick(() => void this.plugin.convertPlaylistToLinks(playlistInput)),
 			);
 		divider(tools);
 		let titlesButton: ButtonComponent | null = null;
