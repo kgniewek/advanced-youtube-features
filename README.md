@@ -16,7 +16,13 @@ Open a channel in its own tab, with details and sortable videos.
 
 ![Dedicated channel page with sorting](images/channel-page.webp)
 
-### Highlights
+### Extensive options
+
+Adjust layouts, hover effects, titles, which details to show and more.
+
+![The settings page](images/settings.png)
+
+Highlights
 
 - **Thumbnail galleries** from plain video links, with titles, channels, views and durations.
 - **Channel cards and playlists** from channel and playlist links, with a "Load more" button for long playlists.
