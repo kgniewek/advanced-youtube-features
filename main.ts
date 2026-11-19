@@ -52,7 +52,7 @@ interface ChannelInfo {
 
 type ChannelLayout = "horizontal" | "vertical";
 type VideoLayout = "horizontal" | "vertical";
-type CardBackground = "transparent" | "padded" | "edge";
+type CardBackground = "transparent" | "padded" | "edge" | "overlay";
 
 interface YouTubeGallerySettings {
 	videoLinks: boolean;
@@ -937,7 +937,7 @@ export default class YouTubeGalleryPlugin extends Plugin {
 		this.observers.clear();
 		this.observerMap = new WeakMap();
 		this.persistSoon.run();
-		document.body.classList.remove("ytg-zoom", "ytg-hovercard", "ytg-filled", "ytg-edge");
+		document.body.classList.remove("ytg-zoom", "ytg-hovercard", "ytg-filled", "ytg-edge", "ytg-overlay");
 		for (const name of ["--ytg-columns", "--ytg-channel-columns", "--ytg-channel-scale", "--ytg-mt", "--ytg-mb", "--ytg-title-size", "--ytg-title-lines", "--ytg-avatar-size", "--ytg-hgap", "--ytg-vgap", "--ytg-player-width", "--file-line-width"]) {
 			document.body.style.removeProperty(name);
 		}
@@ -960,7 +960,7 @@ export default class YouTubeGalleryPlugin extends Plugin {
 		s.columns = clamp(s.columns, 1, 4, 3);
 		s.channelColumns = clamp(s.channelColumns, 1, 4, 3);
 		if ((s.cardBackground as string) === "filled") s.cardBackground = "padded";
-		if (s.cardBackground !== "padded" && s.cardBackground !== "edge") s.cardBackground = "transparent";
+		if (s.cardBackground !== "padded" && s.cardBackground !== "edge" && s.cardBackground !== "overlay") s.cardBackground = "transparent";
 		if (s.videoLayout !== "horizontal") s.videoLayout = "vertical";
 		if (s.channelLayout !== "vertical") s.channelLayout = "horizontal";
 		// First run on a phone: 2 per row instead of the desktop 3 (nothing was saved yet).
@@ -1016,9 +1016,11 @@ export default class YouTubeGalleryPlugin extends Plugin {
 		body.classList.toggle("ytg-hovercard", s.hoverCard);
 		body.classList.toggle("ytg-filled", s.cardBackground !== "transparent");
 		body.classList.toggle("ytg-edge", s.cardBackground === "edge");
+		body.classList.toggle("ytg-overlay", s.cardBackground === "overlay");
 		const mobile = Platform.isMobile;
 		// Same settings on every device; a phone just never goes past 3 per row, and wide (horizontal) cards take a full row.
-		const videoLayout = s.videoLayout;
+		// The overlay style is always a full-size thumbnail, so it ignores the horizontal video layout.
+		const videoLayout = s.cardBackground === "overlay" ? "vertical" : s.videoLayout;
 		const channelLayout = s.channelLayout;
 		const columns = mobile ? (videoLayout === "horizontal" ? 1 : Math.min(s.columns, 3)) : s.columns;
 		const channelColumns = mobile ? (channelLayout === "horizontal" ? 1 : Math.min(s.channelColumns, 3)) : s.channelColumns;
@@ -2814,6 +2816,7 @@ class YouTubeGallerySettingTab extends PluginSettingTab {
 					.addOption("transparent", "Transparent")
 					.addOption("padded", "Padded")
 					.addOption("edge", "Edge to edge")
+					.addOption("overlay", "Overlay")
 					.setValue(settings.cardBackground)
 					.onChange(async (value) => {
 						settings.cardBackground = value as CardBackground;

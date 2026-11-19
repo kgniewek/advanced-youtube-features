@@ -112,6 +112,50 @@ body.ytg-edge.ytg-videos-horizontal .ytg-videos .ytg-video-text {
 	padding: 10px;
 }
 
+/* Overlay: the thumbnail fills the whole card, title and info sit on a dark gradient at the bottom */
+
+body.ytg-overlay .ytg-videos .ytg-item {
+	position: relative;
+	padding: 0;
+	overflow: hidden;
+	background-color: #000;
+}
+
+body.ytg-overlay .ytg-videos .ytg-thumb {
+	border-radius: 0;
+}
+
+body.ytg-overlay .ytg-videos .ytg-video-text {
+	position: absolute;
+	left: 0;
+	right: 0;
+	bottom: 0;
+	padding: 36px 10px 8px;
+	gap: 2px;
+	background: linear-gradient(to top, rgba(0, 0, 0, 0.9) 0%, rgba(0, 0, 0, 0.6) 55%, rgba(0, 0, 0, 0) 100%);
+	color: #fff;
+	pointer-events: none;
+}
+
+body.ytg-overlay .ytg-videos .ytg-title {
+	margin-top: 0;
+	font-weight: var(--font-semibold);
+	text-shadow: 0 1px 3px rgba(0, 0, 0, 0.6);
+}
+
+body.ytg-overlay .ytg-videos .ytg-channel {
+	color: rgba(255, 255, 255, 0.8);
+}
+
+body.ytg-overlay .ytg-videos .ytg-badge {
+	bottom: auto;
+	top: var(--size-2-2);
+}
+
+body.ytg-overlay .ytg-videos .ytg-item:hover {
+	border-color: var(--background-modifier-border-hover);
+}
+
 .ytg-item:focus-visible {
 	outline: 2px solid var(--background-modifier-border-focus);
 	outline-offset: 2px;
