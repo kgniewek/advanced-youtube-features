@@ -1,5 +1,6 @@
 import {
 	App,
+	addIcon,
 	ButtonComponent,
 	Editor,
 	MarkdownView,
@@ -892,6 +893,14 @@ class ChannelView extends ItemView {
 	}
 }
 
+// YouTube logo (top-left) with a small settings cog (bottom-right). The logo is masked
+// so it is cut away around the cog and the two shapes never run into each other.
+const ICON_SETTINGS = "ytg-settings";
+const ICON_SETTINGS_SVG =
+	`<defs><mask id="ytg-cog-cut" maskUnits="userSpaceOnUse" x="0" y="0" width="100" height="100"><rect width="100" height="100" fill="white"/><circle cx="75" cy="75" r="27" fill="black"/></mask></defs>` +
+	`<g mask="url(#ytg-cog-cut)"><g transform="scale(4.1667)"><g transform="translate(0.5 0.5) scale(0.8)" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2.5 17a24.12 24.12 0 0 1 0-10 2 2 0 0 1 1.4-1.4 49.56 49.56 0 0 1 16.2 0A2 2 0 0 1 21.5 7a24.12 24.12 0 0 1 0 10 2 2 0 0 1-1.4 1.4 49.55 49.55 0 0 1-16.2 0A2 2 0 0 1 2.5 17"/><path d="m10 15 5-3-5-3z"/></g></g></g>` +
+	`<g transform="scale(4.1667)"><g transform="translate(12 12) scale(0.5)" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/><circle cx="12" cy="12" r="3"/></g></g>`;
+
 export default class YouTubeGalleryPlugin extends Plugin {
 	settings: YouTubeGallerySettings = { ...DEFAULT_SETTINGS, cache: {}, channelCache: {}, playlistCache: {} };
 
@@ -919,7 +928,10 @@ export default class YouTubeGalleryPlugin extends Plugin {
 		await this.loadSettings();
 		this.refresh(false);
 
+		addIcon(ICON_SETTINGS, ICON_SETTINGS_SVG);
 		this.addSettingTab(new YouTubeGallerySettingTab(this.app, this));
+		this.addCommand({ id: "open-settings", name: "Open settings", icon: ICON_SETTINGS, callback: () => this.openSettings() });
+		this.addRibbonIcon(ICON_SETTINGS, "Advanced YouTube Features settings", () => this.openSettings());
 		this.registerMarkdownPostProcessor((el, ctx) => {
 			this.renderSource = ctx.sourcePath;
 			this.processSection(el);
@@ -1120,6 +1132,13 @@ export default class YouTubeGalleryPlugin extends Plugin {
 		new Notice("Link removed.");
 	}
 
+	openSettings(): void {
+		const setting = (this.app as unknown as { setting?: { open(): void; openTabById(id: string): void } }).setting;
+		if (!setting) return;
+		setting.open();
+		setting.openTabById(this.manifest.id);
+	}
+
 	private async copyText(text: string, done: string): Promise<void> {
 		try {
 			await navigator.clipboard.writeText(text);
@@ -1177,6 +1196,8 @@ export default class YouTubeGalleryPlugin extends Plugin {
 					.setIcon("copy")
 					.onClick(() => void this.copyText(getText(), videoId ? "Title copied." : "Name copied.")),
 			);
+			menu.addSeparator();
+			menu.addItem((item) => item.setTitle("Settings").setIcon("settings").onClick(() => this.openSettings()));
 			if (remove) {
 				menu.addSeparator();
 				menu.addItem((item) => item.setTitle("Remove link").setIcon("trash-2").setWarning(true).onClick(remove));
@@ -1356,7 +1377,7 @@ export default class YouTubeGalleryPlugin extends Plugin {
 	async testApiKey(): Promise<void> {
 		const key = this.settings.apiKey.trim();
 		if (!key) {
-			new Notice("YouTube Gallery: paste an API key first.");
+			new Notice("Advanced YouTube Features: paste an API key first.");
 			return;
 		}
 		try {
@@ -1368,13 +1389,13 @@ export default class YouTubeGalleryPlugin extends Plugin {
 			});
 			if (res.status === 200) {
 				this.resetApiState();
-				new Notice("YouTube Gallery: the API key works.");
+				new Notice("Advanced YouTube Features: the API key works.");
 			} else {
 				const reason = str(pick(res.json, "error", "message"), `HTTP ${res.status}`);
-				new Notice(`YouTube Gallery: the API key was rejected. ${reason}`, 10000);
+				new Notice(`Advanced YouTube Features: the API key was rejected. ${reason}`, 10000);
 			}
 		} catch {
-			new Notice("YouTube Gallery: could not reach YouTube. Check your connection.");
+			new Notice("Advanced YouTube Features: could not reach YouTube. Check your connection.");
 		}
 	}
 
@@ -3270,6 +3291,18 @@ class YouTubeGallerySettingTab extends PluginSettingTab {
 			.addButton((button) => {
 				button.setButtonText("View plugin").onClick(() => {
 					window.open("obsidian://show-plugin?id=advanced-daily-tracker");
+				});
+				setIcon(button.buttonEl.createSpan({ cls: "ytg-link-icon" }), "puzzle");
+			});
+
+		divider(support);
+
+		new Setting(support)
+			.setName("Media Cover Gallery")
+			.setDesc("Turn plain text lists of movies, books & albums into cover galleries.")
+			.addButton((button) => {
+				button.setButtonText("View plugin").onClick(() => {
+					window.open("obsidian://show-plugin?id=media-cover-gallery");
 				});
 				setIcon(button.buttonEl.createSpan({ cls: "ytg-link-icon" }), "puzzle");
 			});
